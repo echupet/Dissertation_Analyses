@@ -1,0 +1,428 @@
+---
+title: "CAP Plots"
+author: "Elena Peterson"
+date: "2024-03-29"
+output: html_document
+---
+
+Plot transition analysis results later...
+
+```{r}
+library(ggplot2)
+
+```
+
+Read in files
+```{r}
+
+# use this as starting point- "Merged_Data_9s_2024-04-09_cleaned.csv"
+dclean <- read.csv("../Data/Merged_Data/Merged_Data_9s_2024-04-09_cleaned.csv",header=TRUE,stringsAsFactors = FALSE)
+names(dclean)
+
+dlong <- read.csv("../Data/Merged_Data/Merged_Data_9s_2024-04-16.csv",header=TRUE,stringsAsFactors = FALSE)
+names(dlong)
+
+dwide = read.csv("../Data/Merged_Data/Merged_Data_Wide_2024-04-16.csv",stringsAsFactors = FALSE, header = TRUE)
+names(dwide)
+
+bdi_mean = aggregate(dlong$bdi2_total, by=list(dlong$participant), mean, na.rm=T)
+names(bdi_mean) = c("participant", "bdi_raw_mean")
+
+dwide2 = merge(dwide, bdi_mean, all.x = T)
+```
+
+Use data frame with length = number of volumes, for visualizing state sequences.
+```{r}
+d720 = read.csv("../Data/Brain_Data/CAP_k8_wide_smoothed_events_2024-03-20.csv")
+
+# can only have numeric columns in matrices:
+all_paths_roll3 = d720[,grep("all_states_path2",names(d720),value=TRUE)]
+
+names(all_paths_roll3) # ordered by ascending subid
+
+#reorder based on who has the highest amount of states 1, 2, 6, 7
+all_paths_ordered = all_paths_roll3[,order(dwide$ts_1267)]
+#reorder based on mean bdi
+all_paths_ordered2 = all_paths_roll3[,order(dwide$age)]
+
+# make matrices
+paths_mat = data.matrix(all_paths_roll3)
+paths_mat_ordered = data.matrix(all_paths_ordered)
+paths_mat_ordered2 = data.matrix(all_paths_ordered2)
+
+# visualize
+image(paths_mat,col=hcl.colors(8,"RdYlBu"))
+image(paths_mat_ordered,col=hcl.colors(8,"RdYlBu"))
+image(paths_mat_ordered2,col=hcl.colors(8,"RdYlBu"))
+
+# print color scheme
+palette1 = data.matrix(c(1:8))
+image(palette1,col=hcl.colors(8,"RdYlBu"))
+```
+
+
+Scatterplots: symptom trajectories
+```{r}
+# remove NAs beforehand...
+
+# just need subject list & n timepoints from cleaned data...
+dclean2 = subset(dclean, select=c("participant", "session", "n_timepoints"))
+
+dlong2 = merge(dclean2, dlong, all.x=TRUE)
+
+d_bdi = dlong2[!is.na(dlong2$bdi2_total),]
+dim(d_bdi)
+
+# remove subs with x or fewer observations
+d_bdi = d_bdi[d_bdi$n_timepoints>2,]
+dim(d_bdi)
+
+#d_bdi3 = d_bdi[d_bdi$n_timepoints>3,]
+#dim(d_bdi3)
+
+
+```
+
+
+```{r}
+
+all_bdi <- ggplot(d_bdi, aes(x=session, y=bdi2_total)) +
+    #geom_smooth(method="lm",color="royalblue4") +
+    geom_point(aes(group = participant, colour=participant)) + 
+    geom_line(aes(group = participant, colour=participant))+
+		xlab("Timepoint") +
+		ylab("BDI")+
+		theme_classic(base_size=18)+
+    theme(plot.title=element_text(hjust = .5),aspect.ratio = 1,legend.position = "none")
+all_bdi
+
+```
+
+Scatterplots: symptom trajectories for median split accuracy
+```{r}
+
+acc_mid = median(d_bdi$OverallAcc, na.rm=T)
+acc_mid
+
+d_bdi$acc_hilo = ifelse(d_bdi$OverallAcc >= acc_mid, "high", ifelse(d_bdi$OverallAcc < acc_mid, "low", NA))
+
+#split into 2 df's
+acc_hi = d_bdi[d_bdi$acc_hilo=="high",]
+acc_lo = d_bdi[d_bdi$acc_hilo=="low",]
+
+# drop RRAY165 just because some missing data
+
+hi_acc_plot <- ggplot(acc_hi, aes(x=session, y=bdi2_total)) +
+    #geom_smooth(method="lm",color="royalblue4") +
+    #geom_point(aes(group = participant, colour=participant)) + 
+    geom_line(aes(group = participant, colour=participant))+
+    ggtitle("High Accuracy") +
+		xlab("Timepoint (Months)") +
+		ylab("BDI")+
+		theme_classic(base_size=18)+
+    theme(plot.title=element_text(hjust = .5),aspect.ratio = 1,legend.position = "none")+
+    #scale_colour_gradient(low = "dodgerblue", high = "magenta", na.value = NA)
+    scale_x_continuous(breaks=seq(0,24,3))+
+    ylim(0,51)
+hi_acc_plot
+
+lo_acc_plot <- ggplot(acc_lo, aes(x=session, y=bdi2_total)) +
+    #geom_smooth(method="lm",color="royalblue4") +
+    #geom_point(aes(group = participant, colour=participant)) + 
+    geom_line(aes(group = participant, colour=participant))+
+    ggtitle("Low Accuracy") +
+		xlab("Timepoint (Months)") +
+		ylab("BDI")+
+		theme_classic(base_size=18)+
+    theme(plot.title=element_text(hjust = .5),aspect.ratio = 1,legend.position = "none")+
+    #scale_colour_gradient(low = "dodgerblue", high = "magenta", na.value = NA)
+    scale_x_continuous(breaks=seq(0,24,3))+
+    ylim(0,51)
+lo_acc_plot 
+
+t.test(acc_hi$bdi2_total, acc_lo$bdi2_total) 
+# group difference is significant
+# may just not correspond to order...
+# should test simple model...
+summary(lm(dwide$bdi_mean ~ dwide$OverallAcc)) # not sig. but try with true mean
+summary(lm(dwide2$bdi_raw_mean ~ dwide2$OverallAcc)) #trending
+```
+Split for phi
+```{r}
+
+phi_mid = median(d_bdi$phi_mean, na.rm=T)
+
+d_bdi$phi_hilo = ifelse(d_bdi$phi_mean >= phi_mid, "high", ifelse(d_bdi$phi_mean < phi_mid, "low", NA))
+
+#split into 2 df's
+phi_hi = d_bdi[d_bdi$phi_hilo=="high",]
+phi_lo = d_bdi[d_bdi$phi_hilo=="low",]
+
+hi_phi_plot <- ggplot(phi_hi, aes(x=session, y=bdi2_total)) +
+    #geom_smooth(method="lm",color="royalblue4") +
+    #geom_point(aes(group = participant, colour=participant)) + 
+    geom_line(aes(group = participant, colour=participant))+
+    ggtitle("High Stability") +
+		xlab("Timepoint (Months)") +
+		ylab("BDI")+
+		theme_classic(base_size=18)+
+    theme(plot.title=element_text(hjust = .5),aspect.ratio = 1,legend.position = "none")+
+    scale_x_continuous(breaks=seq(0,24,3))+
+    ylim(0,51)
+hi_phi_plot
+
+lo_phi_plot <- ggplot(phi_lo, aes(x=session, y=bdi2_total)) +
+    #geom_smooth(method="lm",color="royalblue4") +
+    #geom_point(aes(group = participant, colour=participant)) + 
+    geom_line(aes(group = participant, colour=participant))+
+    ggtitle("Low Stability") +
+		xlab("Timepoint (Months)") +
+		ylab("BDI")+
+		theme_classic(base_size=18)+
+    theme(plot.title=element_text(hjust = .5),aspect.ratio = 1,legend.position = "none")+
+    scale_x_continuous(breaks=seq(0,24,3))+
+    ylim(0,51)
+lo_phi_plot 
+
+```
+
+Split for logv
+```{r}
+#keep x and y axes same size across plots...
+
+logv_mid = median(d_bdi$logv_mean, na.rm=T)
+
+d_bdi$logv_hilo = ifelse(d_bdi$logv_mean >= logv_mid, "high", ifelse(d_bdi$logv_mean < logv_mid, "low", NA))
+
+#split into 2 df's
+logv_hi = d_bdi[d_bdi$logv_hilo=="high",]
+logv_lo = d_bdi[d_bdi$logv_hilo=="low",]
+
+hi_logv_plot <- ggplot(logv_hi, aes(x=session, y=bdi2_total)) +
+    #geom_smooth(method="loess",aes(group = participant, colour=logv_mean), se=FALSE) +
+    #geom_smooth(method="lm",color="royalblue4") +
+    #geom_point(aes(group = participant, colour=logv_mean)) + 
+    geom_line(aes(group = participant, colour=participant))+
+    ggtitle("High Variance") +
+		xlab("Timepoint (Months)") +
+		ylab("BDI")+
+		theme_classic(base_size=18)+
+    theme(plot.title=element_text(hjust = .5),aspect.ratio = 1,legend.position = "none")+
+    #scale_colour_gradient(low = "blue", high = "magenta", na.value = NA)+
+    scale_x_continuous(breaks=seq(0,24,3))+
+    ylim(0,51)
+hi_logv_plot
+
+lo_logv_plot <- ggplot(logv_lo, aes(x=session, y=bdi2_total)) +
+    #geom_smooth(method="loess",aes(group = participant, colour=logv_mean), se=FALSE) +
+    #geom_point(aes(group = participant, colour=logv_mean)) + 
+    geom_line(aes(group = participant, colour=participant))+
+    ggtitle("Low Variance") +
+		xlab("Timepoint (Months)") +
+		ylab("BDI")+
+		theme_classic(base_size=18)+
+    theme(plot.title=element_text(hjust = .5),aspect.ratio = 1,legend.position = "none")+
+    #scale_colour_gradient(low = "blue", high = "magenta", na.value = NA)
+    scale_x_continuous(breaks=seq(0,24,3))+
+    ylim(0,51)
+lo_logv_plot 
+
+```
+
+Split for mean
+```{r}
+#keep x and y axes same size across plots...
+
+mean_mid = median(d_bdi$bdi_mean, na.rm=T)
+
+d_bdi$mean_hilo = ifelse(d_bdi$bdi_mean >= mean_mid, "high", ifelse(d_bdi$bdi_mean < mean_mid, "low", NA))
+
+#split into 2 df's
+mean_hi = d_bdi[d_bdi$mean_hilo=="high",]
+mean_lo = d_bdi[d_bdi$mean_hilo=="low",]
+
+hi_mean_plot <- ggplot(mean_hi, aes(x=session, y=bdi2_total)) +
+    #geom_smooth(method="loess",aes(group = participant, colour=logv_mean), se=FALSE) +
+    #geom_smooth(method="lm",color="royalblue4") +
+    #geom_point(aes(group = participant, colour=logv_mean)) + 
+    geom_line(aes(group = participant, colour=participant))+
+    ggtitle("High Mean") +
+		xlab("Timepoint (Months)") +
+		ylab("BDI")+
+		theme_classic(base_size=18)+
+    theme(plot.title=element_text(hjust = .5),aspect.ratio = 1,legend.position = "none")+
+    #scale_colour_gradient(low = "blue", high = "magenta", na.value = NA)+
+    scale_x_continuous(breaks=seq(0,24,3))+
+    ylim(0,51)
+hi_mean_plot
+
+# for now drop RRAY124 until I figure out why their extracted mean is so low...
+
+mean_lo = mean_lo[mean_lo$participant!="RRAY124",]
+
+lo_mean_plot <- ggplot(mean_lo, aes(x=session, y=bdi2_total)) +
+    #geom_smooth(method="loess",aes(group = participant, colour=logv_mean), se=FALSE) +
+    #geom_point(aes(group = participant, colour=logv_mean)) + 
+    geom_line(aes(group = participant, colour=participant))+
+    ggtitle("Low Mean") +
+		xlab("Timepoint (Months)") +
+		ylab("BDI")+
+		theme_classic(base_size=18)+
+    theme(plot.title=element_text(hjust = .5),aspect.ratio = 1,legend.position = "none")+
+    #scale_colour_gradient(low = "blue", high = "magenta", na.value = NA)
+    scale_x_continuous(breaks=seq(0,24,3))+
+    ylim(0,51)
+lo_mean_plot 
+
+```
+
+
+Smoothed plots
+```{r}
+
+hi_ef_plotx <- ggplot(ef_hi, aes(x=session, y=bdi2_total)) +
+    geom_smooth(method="loess",aes(group = participant, colour=factor(bdi_mean)), se=FALSE) +
+    #geom_point(aes(group = participant, colour=factor(bdi_mean))) + 
+    #geom_line(aes(group = participant, colour=factor(bdi_mean)))+
+		ggtitle("High EF") +
+    xlab("Timepoint") +
+		ylab("BDI")+
+		theme_classic(base_size=18)+
+    theme(plot.title=element_text(hjust = .5),aspect.ratio = 1,legend.position = "none")
+hi_ef_plotx
+
+lo_ef_plotx <- ggplot(ef_lo, aes(x=session, y=bdi2_total)) +
+    geom_smooth(method="loess",aes(group = participant, colour=factor(bdi_mean)), se=FALSE) +
+    #geom_point(aes(group = participant, colour=factor(bdi_mean))) + 
+    #geom_line(aes(group = participant, colour=factor(bdi_mean)))+
+    ggtitle("Low EF") +
+		xlab("Timepoint") +
+		ylab("BDI")+
+		theme_classic(base_size=18)+
+    theme(plot.title=element_text(hjust = .5),aspect.ratio = 1,legend.position = "none")
+lo_ef_plotx
+```
+
+Simple scatterplots
+```{r}
+
+
+plot1 <- ggplot(dwide2, aes(x=OverallAcc, y=logv_mean)) +
+    geom_smooth(method="lm", color="blue") +
+    geom_point(color="blue") + 
+    ggtitle("Accuracy Predicting Log(variance)") +
+		xlab("Accuracy") +
+		ylab("Log(variance)")+
+		theme_classic(base_size=18)+
+    theme(plot.title=element_text(hjust = .5),aspect.ratio = 1,legend.position = "none")
+
+plot2 <- ggplot(dwide2, aes(x=overall_ts_1, y=logv_mean)) +
+    geom_smooth(method="lm", color="dodgerblue") +
+    geom_point(color="dodgerblue") + 
+    ggtitle("TS1 Predicting Log(variance)") +
+		xlab("TS1") +
+		ylab("Log(variance)")+
+		theme_classic(base_size=18)+
+    theme(plot.title=element_text(hjust = .5),aspect.ratio = 1,legend.position = "none")
+
+plot3 <- ggplot(dwide2, aes(x=overall_ts_6, y=logv_mean)) +
+    geom_smooth(method="lm", color="seagreen") +
+    geom_point(color="seagreen") + 
+    ggtitle("TS6 Predicting Log(variance)") +
+		xlab("TS6") +
+		ylab("Log(variance)")+
+		theme_classic(base_size=18)+
+    theme(plot.title=element_text(hjust = .5),aspect.ratio = 1,legend.position = "none")
+
+plot4 <- ggplot(dwide2, aes(x=ts_1267, y=logv_mean)) +
+    geom_smooth(method="lm", color="purple") +
+    geom_point(color="purple") + 
+    ggtitle("TS 1, 2, 6, 7 Predicting Log(variance)") +
+		xlab("Mean(TS 1, 2, 6, 7)") +
+		ylab("Log(variance)")+
+		theme_classic(base_size=18)+
+    theme(plot.title=element_text(hjust = .5),aspect.ratio = 1,legend.position = "none")
+
+plot5 <- ggplot(dwide2, aes(x=Twoback_Acc, y=ts_6_2back)) +
+    geom_smooth(method="lm", color="magenta") +
+    geom_jitter(color="magenta") + 
+    ggtitle("Accuracy predicting TS6 in 2-backs") +
+		xlab("Accuracy") +
+		ylab("TS6 in 2-backs")+
+		theme_classic(base_size=18)+
+    theme(plot.title=element_text(hjust = .5),aspect.ratio = 1,legend.position = "none")
+
+# may consider arcsin acc for plotting?
+
+plot6 <- ggplot(dwide2, aes(x=Zeroback_Acc, y=ts_6_0back)) +
+    geom_smooth(method="lm", color="sienna") +
+    geom_jitter(color="sienna") + 
+    ggtitle("0-Back Accuracy predicting TS6 in 0-backs") +
+		xlab("0-Back Accuracy") +
+		ylab("TS6 in 0-backs")+
+		theme_classic(base_size=18)+
+    theme(plot.title=element_text(hjust = .5),aspect.ratio = 1,legend.position = "none")
+
+plot7 <- ggplot(dwide2, aes(x=Zeroback_Acc, y=ts_1_0back)) +
+    geom_smooth(method="lm", color="forestgreen") +
+    geom_jitter(color="forestgreen") + 
+    ggtitle("0-Back Accuracy predicting TS1 in 0-backs") +
+		xlab("0-Back Accuracy") +
+		ylab("TS1 in 0-backs")+
+		theme_classic(base_size=18)+
+    theme(plot.title=element_text(hjust = .5),aspect.ratio = 1,legend.position = "none")
+
+plot8 <- ggplot(dwide2, aes(x=Zeroback_Acc, y=ps_6_0back)) +
+    geom_smooth(method="lm", color="cornflowerblue") +
+    geom_jitter(color="cornflowerblue") + 
+    ggtitle("0-Back Accuracy predicting PS6 in 0-backs") +
+		xlab("0-Back Accuracy") +
+		ylab("PS6 in 0-backs")+
+		theme_classic(base_size=18)+
+    theme(plot.title=element_text(hjust = .5),aspect.ratio = 1,legend.position = "none")
+
+plot1
+plot2
+plot3
+plot4
+plot5
+plot6
+plot7
+plot8
+```
+
+Scatterplots: symptom trajectories for +/- 1 SD EF
+```{r}
+
+
+ef_pos_SDx <- ggplot(ef_above, aes(x=session, y=bdi2_total)) +
+    geom_smooth(method="loess",aes(group = participant, colour=factor(bdi_mean)), se=FALSE) +
+    #geom_point(aes(group = participant, colour=factor(bdi_mean))) + 
+    #geom_line(aes(group = participant, colour=factor(bdi_mean)))+
+    ggtitle("High EF") +
+		xlab("Timepoint") +
+		ylab("BDI")+
+		theme_classic(base_size=18)+
+    theme(plot.title=element_text(hjust = .5),aspect.ratio = 1,legend.position = "none")
+ef_pos_SDx
+
+ef_neg_SDx <- ggplot(ef_below, aes(x=session, y=bdi2_total)) +
+    geom_smooth(method="loess",aes(group = participant, colour=factor(bdi_mean)), se=FALSE) +
+    #geom_point(aes(group = participant, colour=factor(bdi_mean))) + 
+    #geom_line(aes(group = participant, colour=factor(bdi_mean)))+
+    ggtitle("Low EF") +
+		xlab("Timepoint") +
+		ylab("BDI")+
+		theme_classic(base_size=18)+
+    theme(plot.title=element_text(hjust = .5),aspect.ratio = 1,legend.position = "none")
+ef_neg_SDx
+
+# consider filling in missing data with average of adjacent timepoints
+# (visually same as connecting non-adjacent dots...)
+```
+To do:
+
+-same thing for TS6 & PS6, median split I think
+-reorder colors, perhaps by mean BDI
+-ideally a dotted line would connect missing data... but alternative may be to fill in missing points with average of nearby points...
+

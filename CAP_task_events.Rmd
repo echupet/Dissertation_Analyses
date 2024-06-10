@@ -1,0 +1,177 @@
+---
+title: "CAP Task Events"
+author: "Elena Peterson"
+date: "5/25/2021"
+output: html_document
+---
+
+Script for merging fmri task files (nback_raw_merge_[date].csv) and generating volume-by-volume list of task events (CAP_events_neut_[date].csv).
+
+If task data files and events of importance haven't changed, no need to run this again.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Read in & merge all task files (*skip if this has already been done*):
+```{r}
+setwd("~/Desktop/Dissertation/Data/RRAY_scantask_data/")
+
+alldata = list.files(recursive=T,pattern="*.csv")
+alldata
+alldata = lapply(alldata, read.csv, header=TRUE) #finicky error... just try again.
+mydata = Reduce(function(...)merge(...,all=T),alldata)
+
+# add in fixed data (tasks where subjects switched keys)
+setwd("~/Desktop/Dissertation/Data/RRAY_scantask_data_fixed/")
+
+#list.files(recursive=T,pattern="*.csv")
+alldata2 = list.files(recursive=T,pattern="*.csv")
+alldata2
+alldata2 = lapply(alldata2, read.csv, header=TRUE) #finicky error... just try again.
+mydata2 = Reduce(function(...)merge(...,all=T),alldata2)
+
+# merge raw and fixed data:
+mydata3 = merge(mydata, mydata2, all=T)
+
+# save file
+write.csv(mydata3, file = paste0("~/Desktop/Dissertation/Data/Brain_Data/nback_raw_merge_", Sys.Date(),".csv"),row.names=FALSE)
+
+```
+
+Read in data files:
+```{r}
+#use merged data file:
+mydata <- read.csv("../Data/Brain_Data/nback_raw_merge_2024-03-29.csv",header=TRUE)
+
+#subject list:
+dsubs = read.csv("../Data/Brain_Data/vols_per_sub.csv",header=TRUE)
+names(dsubs)
+
+```
+
+Next, create list of task events along with corresponding fmri volumes (*skip if this has already been done*):
+```{r}
+# tv = time to collect one volume
+tv = 800 #(based on specs)
+
+#Cumulative time per volume:
+voltimes <- c(1:720)*tv
+n = data.frame("voltimes"=voltimes)
+e = data.frame("voltimes"=voltimes)
+
+#Determine events at each volume
+#use all data, turn into loop to get average times
+
+gtimes =  data.frame("ind"=1:48) #48= number events
+
+for (f in 1:length(alldata)) {
+  #Get scanner pulse time:
+  #SyncSlide.OnsetTime?
+  d = alldata[[f]]
+  pulsetime <- d$trial_startT[3] #check....
+  
+  #list of all block start times
+  btimes <- d$trial_startT[which(d$trials.thisN==0)]
+  
+  #list of other starts
+  cuetimes<- d$trial_startT[which(d$trials.thisN==0)-1]
+  endtimes<- d$trial_startT[which(d$trials.thisN==9)+1]
+  
+  alltimes <- c(btimes,cuetimes,endtimes)
+  alltimes <- sort(alltimes)
+  alltimes <- alltimes - pulsetime
+  alltimes <- alltimes*1000
+  #diff(alltimes)
+  
+  gtimes[,f+1] <- alltimes
+}
+
+# get average times for each event, across subjects
+avtimes = rowMeans(gtimes,na.rm=T)
+
+eventcat <- c("Cue","Block","End","Cue","Block","Fix",
+              "Cue","Block","End","Cue","Block","Fix",
+              "Cue","Block","End","Cue","Block","Fix",
+              "Cue","Block","End","Cue","Block","Fix",
+              "Cue","Block","End","Cue","Block","Fix",
+              "Cue","Block","End","Cue","Block","Fix",
+              "Cue","Block","End","Cue","Block","Fix",
+              "Cue","Block","End","Cue","Block","Fix")
+
+eventnames1 <- c("Cue1","2BackFace","End1","Cue2","0BackFace","Fix1",
+              "Cue3","2BackPlace","End2","Cue4","0BackFace","Fix2",
+              "Cue5","0BackPlace","End3","Cue6","2BackFace","Fix3",
+              "Cue7","0BackPlace","End4","Cue8","2BackPlace","Fix4",
+              "Cue9","2BackPlace","End5","Cue10","0BackFace","Fix5",
+              "Cue11","2BackFace","End6","Cue12","0BackPlace","Fix6",
+              "Cue13","2BackFace","End7","Cue14","2BackPlace","Fix7",
+              "Cue15","0BackFace","End8","Cue16","0BackPlace","Fix8")
+
+blocknum <- c("Cue1","Block1","End1","Cue2","Block2","Fix1",
+              "Cue3","Block3","End2","Cue4","Block4","Fix2",
+              "Cue5","Block5","End3","Cue6","Block6","Fix3",
+              "Cue7","Block7","End4","Cue8","Block8","Fix4",
+              "Cue9","Block9","End5","Cue10","Block10","Fix5",
+              "Cue11","Block11","End6","Cue12","Block12","Fix6",
+              "Cue13","Block13","End7","Cue14","Block14","Fix7",
+              "Cue15","Block15","End8","Cue16","Block16","Fix8")
+
+# 0backface = b2, b4, b10, b15
+# 0backplace = b5, b7, b12, b16
+# 2backface = b1, b6, b11, b13
+# 2backplace = b3, b8, b9, b14
+
+#let's say there's a row of volume collection times d$voltimes:
+#For cumulative time at each volume, compare to event times and categorize:
+#Note that voltimes is time to finish, not start, each volume. This means 
+#that volumes are only considered to belong to an event if they finish before the next event starts.
+
+event=2
+voleventname1 = c()
+voleventname2 = c()
+voleventcat = c()
+volblocknum = c()
+
+#add events to corresponding volumes
+for (vol in 1:length(voltimes)) {
+  if (voltimes[vol] < avtimes[event]) {
+    voleventname1[vol] = eventnames1[event-1]
+    voleventcat[vol] = eventcat[event-1]
+    volblocknum[vol] = blocknum[event-1]
+  } else {
+    event = event + 1
+    voleventname1[vol] = eventnames1[event-1]
+    voleventcat[vol] = eventcat[event-1]
+    volblocknum[vol] = blocknum[event-1]
+    if (event == 49) {
+      voleventname1[vol:length(voltimes)] = eventnames1[48]
+      voleventcat[vol:length(voltimes)] = eventcat[48]
+      volblocknum[vol:length(voltimes)] = blocknum[48]
+      break
+    }
+  }
+}
+
+#add event labels
+n$voleventname1 = voleventname1
+n$voleventcat = voleventcat
+n$volblocknum = volblocknum
+
+
+#add stim type & wm load labels
+n$stimtype = ifelse(grepl("Face",n$voleventname1),"Nface",
+                    ifelse(grepl("Place",n$voleventname1),"Place",NA))
+
+n$wmload = ifelse(grepl("0Back",n$voleventname1),"0back",                
+                    ifelse(grepl("2Back",n$voleventname1),"2back",NA))
+
+```
+
+Write task events file
+```{r}
+#this contains the events for the neutral task at each volume:
+write.csv(n,file = paste0("CAP_events_neut_", Sys.Date(),".csv"),row.names=FALSE)
+
+```

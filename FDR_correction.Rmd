@@ -1,0 +1,206 @@
+---
+title: "Posthoc Tests"
+author: "Elena Peterson"
+date: "2024-03-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+FDR correction for models with EF
+```{r}
+# fill in list of p-values below- whatever is involved in mediation
+
+# first, direct path c'- does EF predict depression trajectories? (3 paths in each model - take average)
+# next, a paths - does EF predict brain measures? (1 brain state x 3 measures x 1 predictor = 3)
+# next, b paths - do brain measures predict depression trajectories, controlling for EF? (1 brain state x 3 measures x 3 outcomes = 9)
+# total = 15 p-values
+
+a = mean(c(.198,.138,.097)) #EF-Phi
+b = mean(c(.164,.174,.162)) #EF-Var
+c = mean(c(.495,.478,.455)) #EF-Mean
+
+print(c(a, b, c))
+
+mplus_ps = c(  a, b, c,        # c paths (averaged)
+             .105, .011, .133,  # b paths for brain measure 1
+             .125, .009, .133,  # b paths for brain measure 2
+             .468, .278, .183,  # b paths for brain measure 3
+             .365, .44, .283)   # a paths  
+
+mplus_ps = mplus_ps*2 #one-tailed p-vals reported in mplus
+
+names(mplus_ps) = c("EF_Phi", "EF_Var", "EF_Mean", # c' paths
+                 "TS6_Phi", "TS6_Var", "TS6_Mean", # b path 
+                 "PS6_Phi", "PS6_Var", "PS6_Mean", # b path 
+                 "TX61_Phi", "TX61_Var", "TX61_Mean", # b path
+                 "EF_TS6", "EF_PS6", "EF_TX61") # a paths
+
+# nothing survives correction:
+sort(round(p.adjust(mplus_ps,"BH"),3))
+
+```
+
+
+```{r}
+# BDI and logv are correlated, so I added that to model and reran results:
+############################################################################
+
+mplus_ps = c(.049, .122, .379, 
+             .011, .013, .154, 
+             .015, .008, .075,
+             .487, .185, .318)
+
+mplus_ps2 = mplus_ps*2 #one-tailed p-vals reported in mplus
+
+reg_ps = c(0.875, 0.749, 0.59)
+
+all_ps = c(mplus_ps2, reg_ps)
+
+names(all_ps) = c("EF_Phi", "EF_Var", "EF_Mean", 
+                 "TS6_Phi", "TS6_Var", "TS6_Mean",
+                 "PS6_Phi", "PS6_Var", "PS6_Mean",
+                 "TX61_Phi", "TX61_Var", "TX61_Mean",
+                 "EF_TS6", "EF_PS6", "EF_TX61")
+
+# nothing survived correction...
+sort(round(p.adjust(all_ps,"fdr"),3))
+
+# still doesn't survive correction
+
+# Trying again but running everything in one model (a,b,c, indirect paths):
+############################################################################
+# what about averaging redundant paths?
+# check correlation between ts6, ps6, trx61
+
+mplus_ps = c(.082, .182, .367, #PS6: .046, .214, .379; #TRX61: .046, .173, .407; 
+             
+             .190, .016, .172, 
+             .173, .013, .109,
+             .354, .225, .186,
+              
+             .471, .475, .456, 
+             .396, .398, .353,
+             .377, .448, .386,
+             
+             .454, .352, .301)
+
+mplus_ps2 = mplus_ps*2 #one-tailed p-vals reported in mplus
+
+#reg_ps = c(0.875, 0.749, 0.59)
+
+#all_ps = c(mplus_ps2, reg_ps)
+
+names(mplus_ps2) = c("EF_Phi_Prime", "EF_Var_Prime", "EF_Mean_Prime",   # c' paths- just use one?
+                 
+                  "TS6_Phi", "TS6_Var", "TS6_Mean",   # b paths
+                 "PS6_Phi", "PS6_Var", "PS6_Mean",    # b paths
+                 "TX61_Phi", "TX61_Var", "TX61_Mean", # b paths
+                 
+                 "Indir1_TS6", "Indir2_TS6", "Indir3_TS6", # indir paths
+                 "Indir1_PS6", "Indir2_PS6", "Indir3_PS6", # indir paths
+                 "Indir1_TX61", "Indir2_TX61", "Indir3_TX61", # indir paths
+                 
+                 "EF_TS6", "EF_PS6", "EF_TX61") # a paths
+
+# nothing survived correction...
+sort(round(p.adjust(mplus_ps2,"fdr"),3))
+
+# still doesn't survive correction, worse even
+
+cor.test(d$overall_ps_6, d$overall_ts_6) # highly correlated- r = .71
+
+cor.test(d$overall_ps_6, d$trx_61) # not correlated
+
+cor.test(d$overall_ts_6, d$trx_61) # somewhat correlated (r=.28, p<.001)
+
+# or, correct within each model? Or is that worse?
+
+# Try FDR correction per model:
+############################################################################
+
+mplus_ps = c(.046, .214, .379,
+             
+             .173, .013, .109, 
+
+             .352)
+
+mplus_ps2 = mplus_ps*2 #one-tailed p-vals reported in mplus
+
+#reg_ps = c(0.875, 0.749, 0.59)
+
+#all_ps = c(mplus_ps2, reg_ps)
+
+names(mplus_ps2) = c("EF_Phi_Prime", "EF_Var_Prime", "EF_Mean_Prime",   # c' paths- just use one?
+                 
+                  "TS6_Phi", "TS6_Var", "TS6_Mean",   # b paths
+                 
+                 "EF_TS6") # a paths
+
+# nothing survived correction...
+sort(round(p.adjust(mplus_ps2,"fdr"),3))
+```
+```{r}
+# Trying again with accuracy...
+############################################################################
+# what about averaging redundant paths?
+# check correlation between ts6, ps6, trx61
+
+mplus_ps = c(.202, .003, .096, #PS6: .204, .002, .459; #TRX61: .140, .008, .299; 
+             
+             .167, .005, .081, 
+             .215, .001, .061,
+             .459, .198, .197,
+              
+             .159, .225, .101, 
+             .086, .226, .028,
+             .302, .460, .312,
+             
+             .096, .027, .175)
+
+mplus_ps2 = mplus_ps*2 #one-tailed p-vals reported in mplus
+
+#reg_ps = c(0.875, 0.749, 0.59)
+
+#all_ps = c(mplus_ps2, reg_ps)
+
+names(mplus_ps2) = c("EF_Phi_Prime", "EF_Var_Prime", "EF_Mean_Prime",   # c' paths- just use one?
+                 
+                  "TS6_Phi", "TS6_Var", "TS6_Mean",   # b paths
+                 "PS6_Phi", "PS6_Var", "PS6_Mean",    # b paths
+                 "TX61_Phi", "TX61_Var", "TX61_Mean", # b paths
+                 
+                 "Indir1_TS6", "Indir2_TS6", "Indir3_TS6", # indir paths
+                 "Indir1_PS6", "Indir2_PS6", "Indir3_PS6", # indir paths
+                 "Indir1_TX61", "Indir2_TX61", "Indir3_TX61", # indir paths
+                 
+                 "EF_TS6", "EF_PS6", "EF_TX61") # a paths
+
+# finally something! PS6 * Var, EF*Var marginal...
+sort(round(p.adjust(mplus_ps2,"fdr"),3))
+
+# dropping indirects...
+mplus_ps = c(.202, .003, .096, #PS6: .204, .002, .459; #TRX61: .140, .008, .299; 
+             .167, .005, .081, 
+             .215, .001, .061,
+             .459, .198, .197,
+
+             .096, .027, .175)
+
+mplus_ps2 = mplus_ps*2
+
+names(mplus_ps2) = c("EF_Phi_Prime", "EF_Var_Prime", "EF_Mean_Prime",   # c' paths- just use one?
+                 
+                  "TS6_Phi", "TS6_Var", "TS6_Mean",   # b paths
+                 "PS6_Phi", "PS6_Var", "PS6_Mean",    # b paths
+                 "TX61_Phi", "TX61_Var", "TX61_Mean", # b paths
+                 
+                 "EF_TS6", "EF_PS6", "EF_TX61") # a paths
+
+# nothing survived correction...
+sort(round(p.adjust(mplus_ps2,"fdr"),3))
+
+# PS6 * Var, TS6*Var marginal...
+```

@@ -1,0 +1,145 @@
+---
+title: "Demographics"
+author: "Elena Peterson"
+date: "2024-05-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+dwide = read.csv("../Data/Merged_Data/Merged_Data_Wide_2024-04-16.csv",stringsAsFactors = FALSE, header = TRUE)
+dim(dwide)
+names(dwide)
+
+dwide2 = dwide[dwide$participant!="RRAY001" & dwide$participant!="RRAY146",]
+dim(dwide2)
+
+dem = read.csv("../Data/Cleaned_Survey_Data/RRAY_Baseline_Clean_09262023_Dates.csv",stringsAsFactors = FALSE,header=TRUE, na.strings = "9999")
+names(dem)
+
+```
+
+```{r}
+lastcol = which(names(dem)=="bdi2_total")
+dem2 = dem[,1:lastcol]
+
+alldem = merge(dwide2, dem, all.x = TRUE)
+dim(alldem)
+```
+
+```{r}
+mean(alldem$age, na.rm=T) #16.53
+sd(alldem$age, na.rm=T) #1.97
+
+table(alldem$sex) # 1 = 94, 2 = 63.... double-check which is which
+prop.table(table(alldem$sex))
+
+# further info on transgender?
+prop.table(table(alldem$gender))
+# 1 = woman
+#2 = man
+# 3 = transgender
+# 4 = non-binary
+
+prop.table(table(alldem$race))
+# 2 = 6 (asian)
+# 4 = 2 (black or african american)
+# 5 = 132 (white)
+# 6 = 18 (more than one race)
+
+prop.table(table(alldem$hispaniclatino))
+# 1 = 14 (Hispanic or Latino/a/x)
+# 2 = 144 
+
+prop.table(table(alldem$householdincome))
+# 1 = 4 (less than 10k)
+# 2 = 13 (10k - 25k)
+# 3 = 20 (25-50k)
+# 4 = 29 (50-75k)
+# 5 = 32 (75-100k)
+# 6 = 60 (more than 100k)
+
+### MAX PARENT ED ###
+#need to combine parent ed- make new df:
+parents <-subset(alldem,select=c(highesteducationDad, highesteducationMom, highesteducationOtherParent))
+
+#remove 10s which are NAs
+parents[parents==10] <- NA
+
+#find max
+parents$maxparent <- apply(parents,1,max,na.rm=T)
+
+#add back to main df
+alldem$max_parent_ed <- maxparent
+
+table(alldem$max_parent_ed)
+
+# 1) 8th grade or less- 0
+# 2) Some high school- 0
+# 3) Finished high school- 7
+# 4) Completed GED- 0
+# 5) Vocations / Trade / Business School- 0
+# 6) Some College or 2 year degree- 8
+# 7) Finished 4 year degree- 38 
+# 8) Masters degree or equivalent- 83
+# 9) Other advanced degree- 21
+
+n=157
+# Convert to different categories:
+0 # Without high school diploma = 0
+7/n # High school graduate w/o college degree = 7
+8/n # Some college education = 8
+38/n # 4-yr college degree = 38
+104/n # Masters or other advanced degree = 83 + 21 = 104
+
+risk = read.csv("../Data/Merged_Data/RRAY_risk_status.csv", header=TRUE, stringsAsFactors = FALSE)
+
+risk$participant = substr(risk$subid,1,7)
+alldem2 = merge(alldem, risk, all.x = TRUE)
+dim(alldem2)
+
+prop.table(table(alldem2$Group))
+sum(table(alldem2$Group))
+
+sum(is.na(alldem2$overall_ps_8))
+```
+
+
+```{r}
+
+brains = read.csv("../Data/Brain_Data/CAP_measures_overall_2024-04-17.csv",stringsAsFactors = FALSE, header = TRUE)
+dim(brains)
+names(brains)
+
+brains2 = brains[brains$subid!="sub-001" & brains$subid!="sub-146",]
+dim(brains2)
+
+# generally around 4-5 volumes, translates to 3-4 seconds
+mean(brains2$ps_1_0back); mean(brains2$ps_1_2back)
+mean(brains2$ps_2_0back); mean(brains2$ps_2_2back)
+mean(brains2$ps_3_0back, na.rm=T); mean(brains2$ps_3_2back, na.rm=T)
+mean(brains2$ps_4_0back); mean(brains2$ps_4_2back)
+mean(brains2$ps_5_0back,na.rm=T); mean(brains2$ps_5_2back)
+mean(brains2$ps_6_0back); mean(brains2$ps_6_2back)
+mean(brains2$ps_7_0back); mean(brains2$ps_7_2back, na.rm=T)
+mean(brains2$ps_8_0back, na.rm=T); mean(brains2$ps_8_2back, na.rm=T)
+
+# generally around 4-5 volumes, translates to 3-4 seconds
+mean(brains2$ts_1_0back); mean(brains2$ts_1_2back)
+mean(brains2$ts_2_0back); mean(brains2$ts_2_2back)
+mean(brains2$ts_3_0back); mean(brains2$ts_3_2back)
+mean(brains2$ts_4_0back); mean(brains2$ts_4_2back)
+mean(brains2$ts_5_0back); mean(brains2$ts_5_2back)
+mean(brains2$ts_6_0back); mean(brains2$ts_6_2back)
+mean(brains2$ts_7_0back); mean(brains2$ts_7_2back)
+mean(brains2$ts_8_0back, na.rm=T); mean(brains2$ts_8_2back, na.rm=T)
+
+mean(alldem$trx_61) # 3.63 - pretty small number!
+max(alldem$trx_61) # 11
+min(alldem$trx_61) # 0
+hist(alldem$trx_61)
+```

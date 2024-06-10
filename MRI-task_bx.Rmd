@@ -1,0 +1,177 @@
+---
+title: "MRI n-back"
+author: "Elena Peterson"
+date: "2/3/2021"
+output: html_document
+---
+
+Script for extracting behavioral measures from fmri task.
+
+Questions:
+remove rows with missing responses? Could try both ways...
+some ppl have bx files but no mri?
+may need to add trimming for RTs... see preregistration
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load packages & data files 
+```{r}
+# the 3/29 file has the hand-corrected task files
+mydata <- read.csv("../Data/Brain_Data/nback_raw_merge_2024-03-29.csv",header=TRUE)
+
+# subject list
+dsubs = read.csv("../Data/Brain_Data/vols_per_sub.csv",header=TRUE)
+names(dsubs)
+
+# load packages
+library(dplyr)
+library(stringr)
+```
+
+Clean up mydata for computing accuracy measures
+```{r}
+mydata$subid = paste0("sub-", substr(mydata$participant, 5,7))
+
+# remove 3 rows at start of task file
+mydata_acc <- mydata[-which(mydata$BlockFile==""),]
+
+#remove rows in between blocks
+mydata_acc <- mydata_acc[!is.na(mydata_acc$trials.thisN),] #removes rows in between blocks
+#mydata <- mydata[!is.na(mydata$key_resp_3.corr),] # redundant with above?
+
+# remove 1st 2 trials of 2-back blocks
+mydata_acc <- mydata_acc[-which(mydata_acc$BlockType == "2-Back" & mydata_acc$trials.thisIndex <= 1),]
+
+#remove rows with missing responses (try both ways)
+mydata_acc_NoMiss <- mydata_acc[-which(mydata_acc$key_resp_3.keys=="None"),] #check with rosi about this
+```
+
+Get overall accuracy measures
+```{r}
+#note: aggregate reorders IDs. So to keep it the same, first get unique IDs, then sort.
+master <- data.frame("participant" = sort(unique(mydata$participant)))
+
+
+master$OverallAccuracy <- aggregate(list(OverallAccuracy=mydata_acc$key_resp_3.corr),
+                                list(participant=mydata_acc$participant),
+                                mean)$OverallAccuracy
+
+master$OverallNoAccuracy <- aggregate(list(OverallNoAccuracy=mydata_acc[mydata_acc$TargetType == "nonlure",]$key_resp_3.corr),list(participant=mydata_acc[mydata_acc$TargetType == "nonlure",]$participant),mean)$OverallNoAccuracy
+
+master$OverallYesAccuracy <- aggregate(list(OverallYesAccuracy=mydata_acc[mydata_acc$TargetType == "target",]$key_resp_3.corr),list(participant=mydata_acc[mydata_acc$TargetType == "target",]$participant), mean)$OverallYesAccuracy
+
+master$OverallLureAccuracy <- aggregate(list(OverallLureAccuracy=mydata_acc[mydata_acc$TargetType == "lure",]$key_resp_3.corr),list(participant=mydata_acc[mydata_acc$TargetType == "lure",]$participant), mean)$OverallLureAccuracy
+
+master$Zeroback_Accuracy <- aggregate(list(Zeroback_Accuracy=mydata_acc[mydata_acc$BlockType == "0-Back",]$key_resp_3.corr),
+                                list(participant=mydata_acc[mydata_acc$BlockType == "0-Back",]$participant),
+                                mean)$Zeroback_Accuracy
+
+master$Twoback_Accuracy <- aggregate(list(Twoback_Accuracy=mydata_acc[mydata_acc$BlockType == "2-Back",]$key_resp_3.corr),
+                                list(participant=mydata_acc[mydata_acc$BlockType == "2-Back",]$participant),
+                                mean)$Twoback_Accuracy
+
+# check for low accuracy scores
+master$Participant[which(master$OverallAccuracy<.6)]
+
+#master$OverallAccuracy[which(master$OverallAccuracy<.6)] 
+
+```
+
+
+Get overall RT measures
+```{r}
+# may need to add trimming... see preregistration
+
+#note: aggregate reorders IDs. So to keep it the same, first trim IDs to be consistent,
+# then sort.
+master$OverallRT <- aggregate(list(OverallRT=mydata_acc$key_resp_3.rt),
+                                list(participant=mydata_acc$participant),
+                                mean,na.rm=T)$OverallRT
+
+master$Zeroback_RT <- aggregate(list(ZerobackRT=mydata_acc[mydata_acc$BlockType == "0-Back",]$key_resp_3.rt),
+                                list(participant=mydata_acc[mydata_acc$BlockType == "0-Back",]$participant),
+                                mean,na.rm=T)$ZerobackRT
+
+master$Twoback_RT <- aggregate(list(TwobackRT=mydata_acc[mydata_acc$BlockType == "2-Back",]$key_resp_3.rt),
+                                list(participant=mydata_acc[mydata_acc$BlockType == "2-Back",]$participant),
+                                mean,na.rm=T)$TwobackRT
+
+master$Overall_logRT = log(master$OverallRT*1000)
+master$Zeroback_logRT = log(master$Zeroback_RT*1000)
+master$Twoback_logRT = log(master$Twoback_RT*1000)
+
+```
+
+
+Define function for getting different accuracy types by condition
+```{r}
+
+#count missing responses
+missing <- function(y) {
+  sum(y=="None")
+}
+
+#accuracy by condition function
+which_acc <- function(condition) {
+  
+  Acc <- aggregate(list(BlockAccuracy=mydata_acc[condition,]$key_resp_3.corr),
+  list(participant=mydata_acc[condition,]$participant),mean)
+  
+  Miss <- aggregate(list(Misses=mydata_acc[condition,]$key_resp_3.keys),
+  list(participant=mydata_acc[condition,]$participant),missing)
+
+  merge(Acc,Miss,all=T)
+}
+
+```
+
+Check for lots of missing responses (at least half per block)
+```{r}
+nblocks = paste0("Blocks/","Block",1:16,".xlsx")
+
+# get block level accuracy & missed responses
+for (b in nblocks) {
+  B1 <- which_acc(mydata_acc$BlockFile==b)
+  if (sum(B1$Misses>4)>0) {
+    print(B1$participant[which(B1$Misses>4)])
+  }
+}
+#RRAY068, RRAY146 have some sparse blocks- take a closer look
+
+```
+Add more specific accuracy measures:
+number of missing repsonses
+accuracy on lures
+false positives
+false negatives
+
+```{r}
+master$Zeroback_Misses <- aggregate(
+  list(Zeroback_Misses=mydata_acc[mydata_acc$BlockType == "0-Back",]$key_resp_3.keys), list(participant=mydata_acc[mydata_acc$BlockType == "0-Back",]$participant), missing)$Zeroback_Misses
+
+master$Zeroback_Lures <- aggregate(
+  list(Zeroback_Lures=mydata_acc[mydata_acc$BlockType == "0-Back" & mydata_acc$TargetType=="lure",]$key_resp_3.corr), list(participant=mydata_acc[mydata_acc$BlockType == "0-Back"& mydata_acc$TargetType=="lure",]$participant), mean)$Zeroback_Lures
+
+master$Zeroback_Lures <- aggregate(
+  list(Zeroback_Lures=mydata_acc[mydata_acc$BlockType == "0-Back" & mydata_acc$TargetType=="lure",]$key_resp_3.corr), list(participant=mydata_acc[mydata_acc$BlockType == "0-Back"& mydata_acc$TargetType=="lure",]$participant), mean)$Zeroback_Lures
+
+master$Zeroback_Nonlures <- aggregate(
+  list(Zeroback_Nonlures=mydata_acc[mydata_acc$BlockType == "0-Back" & mydata_acc$TargetType=="nonlure",]$key_resp_3.corr), list(participant=mydata_acc[mydata_acc$BlockType == "0-Back"& mydata_acc$TargetType=="nonlure",]$participant), mean)$Zeroback_Nonlures
+
+master$Zeroback_Targets <- aggregate(
+  list(Zeroback_Targets=mydata_acc[mydata_acc$BlockType == "0-Back" & mydata_acc$TargetType=="target",]$key_resp_3.corr), list(participant=mydata_acc[mydata_acc$BlockType == "0-Back"& mydata_acc$TargetType=="target",]$participant), mean)$Zeroback_Targets
+
+# can divide by trial type (target, nonlure, lure)
+# or error type...
+
+
+
+
+```
+
+Save behavioral measures (acc & RT)
+```{r}
+write.csv(master, paste0("../Data/Brain_Data/Task_Bx_",Sys.Date(),".csv"),row.names = FALSE)
+```

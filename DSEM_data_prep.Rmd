@@ -1,0 +1,58 @@
+---
+title: "DSEM Data Prep"
+author: "Elena Peterson"
+date: '2024-01-23'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+d = read.csv("Mplus/DSEM_test_data.csv",stringsAsFactors = FALSE, header = TRUE)
+```
+
+```{r}
+#table(d$Participant)
+mean(d$bdi2_total,na.rm=T) #9.19
+sd(d$bdi2_total,na.rm=T) #10.38
+hist(d$bdi2_total)
+
+hist(d$bdi2_total[d$session==6])
+hist(d$bdi2_total[d$session==21])
+
+submeans = aggregate(d$bdi2_total,by=list(d$Participant),mean)$x
+
+hist(submeans)
+
+length(unique(d$Participant)) # 141...
+
+# check zero-inflated
+# square root and log....
+# can compare to negative binomial.... same direction
+```
+
+```{r}
+# make new data with same mean and sd
+
+sublist = rep(1:150,each = 9)
+head(sublist)
+d2 = data.frame("Participant"=sublist)
+
+d2$session = rep(1:9, 150)
+
+length(d2$Participant) #1350
+d2$BDI = rnorm(n=1350, mean=9.19, sd=10.38)
+d2$BDI = round(d2$BDI,3)
+d2$BDI = ifelse(d2$BDI<0, 0, d2$BDI)
+
+hist(d2$BDI)
+
+d2$Brain = rep(rnorm(n=150, mean=10, sd=3),each=9)
+d2$EF = rep(rnorm(n=150, mean=4, sd=2),each=9)
+
+d2[is.na(d2)] = -999
+write.csv(d2,"DSEM_sim_data.csv",row.names = FALSE)
+```

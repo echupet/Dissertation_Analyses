@@ -1,0 +1,173 @@
+---
+title: "CAP distances"
+author: "Elena Peterson"
+date: '2023-11-03'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Script for smoothing k-means distance metrics, relabelling states based on smoothed sequences, and saving brain state sequences in long (CAP_k8_long_sequence_[date].csv) and wide formats (CAP_k8_wide_smoothed_[date].csv).
+
+Load packages & data files
+```{r}
+library(zoo)
+library(ggplot2)
+
+dlong = read.csv("../Data/Brain_Data/CAP_k8_long_sequence.csv",header=TRUE)
+names(dlong)
+
+dsubs = read.csv("../Data/Brain_Data/vols_per_sub.csv",header=TRUE)
+names(dsubs)
+```
+Add volume numbers and subject labels to long data. (Each person has different numbers of starting volumes trimmed.)
+```{r}
+
+# check that lengths match
+length(dlong$d1) == sum(dsubs$nvols)
+
+# add total index
+dlong$index = 1:length(dlong$d1)
+
+# add subject labels
+dlong$subid = rep(dsubs$subid, dsubs$nvols)
+
+# add volume number per subject, and drop subject-specific number of start volumes
+volnums = c()
+for (num in dsubs$nvols) {
+  startnum = 720 - num + 1
+  volnums = c(volnums,startnum:720)
+}
+
+# lengths should match
+length(volnums) == length(dlong$d1)
+
+dlong$volnums = volnums
+
+```
+
+Function for computing rolling average for each person.
+```{r}
+# alignment is centered (for volumes 1, 2, 3: 2 is averaged with 1 and 3)
+
+compute_roll3 = function(distcol) {
+  roll_list = c()
+  for (sub in dsubs$subid) {
+    dsmall = dlong[dlong["subid"]==sub,]  # select rows for 1 subject
+    roll3 = rollmean(dsmall[distcol],3,fill = NA)
+    roll_list = c(roll_list,roll3)
+  }
+  return(roll_list)
+}
+```
+
+Add rolling averages to long data:
+```{r}
+dlong$d1_roll3 = compute_roll3("d1")
+dlong$d2_roll3 = compute_roll3("d2")
+dlong$d3_roll3 = compute_roll3("d3")
+dlong$d4_roll3 = compute_roll3("d4")
+dlong$d5_roll3 = compute_roll3("d5")
+dlong$d6_roll3 = compute_roll3("d6")
+dlong$d7_roll3 = compute_roll3("d7")
+dlong$d8_roll3 = compute_roll3("d8")
+
+```
+
+Reassign states based on rolling averages of distance metric:
+```{r}
+#subset data
+all_rolls = dlong[,c("d1_roll3","d2_roll3","d3_roll3","d4_roll3","d5_roll3","d6_roll3","d7_roll3","d8_roll3")]
+
+# this will add back in NAs
+xlist = c()
+for (i in 1:length(all_rolls$d1_roll3)) {
+  x = which.min(all_rolls[i,]) #minimum distance is new state assignment
+  x = ifelse(length(x)==1,x,NA)
+  xlist = c(xlist,x)
+}
+
+# add new assignments to long data
+dlong$all_states_path2 = xlist
+
+sum(dlong$all_states_path2 == dlong$idx_raw,na.rm=T) #98091
+
+98091/113165 # preserves 87% of the sequence
+
+```
+
+Visualize rolling average for each person
+```{r}
+
+# change subject as needed...
+d1sub = dlong[dlong$subid=="sub-001",]
+
+gr_sub <- ggplot(d1sub, aes(x=volnums)) + 
+  geom_line(aes(y=d4_roll3),color="blue") +
+  #xlab("Cylinders") + # x-axis label
+  #ylab("Horsepower") + # y-axis-label
+  #ggtitle("Title") + # Title of plot
+  theme_classic() 
+
+gr_sub
+
+```
+
+Make data frame with length = number of volumes, for visualizing state sequences.
+```{r}
+
+# non-smoothed data:
+dwide_720 = data.frame("volnum"=1:720)
+for (sub in dsubs$subid) {
+    # get volumes belonging to sub:
+    dsmall = dlong[dlong$subid==sub,c("d1","d2","d3","d4","d5","d6","d7","d8", "idx_raw")]
+    names(dsmall) = paste(c("d1","d2","d3","d4","d5","d6","d7","d8", "idx_raw"), sub, sep="_")
+    nvol = nrow(dsmall)
+    extrarows = 720 - nvol
+    dsmall[nvol+1 : extrarows, ] = NA 
+    dsmall2 = rbind(dsmall[nvol+1:extrarows, ], dsmall[1:nvol,]) # put NAs at beginning
+    dwide_720 = cbind(dwide_720,dsmall2)
+}
+
+# smoothed data:
+dwide_720_roll3 = data.frame("volnum"=1:720)
+for (sub in dsubs$subid) {
+    # get volumes belonging to sub:
+    dsmall = dlong[dlong$subid==sub,c("d1_roll3","d2_roll3","d3_roll3","d4_roll3","d5_roll3","d6_roll3","d7_roll3","d8_roll3", "all_states_path2")]
+    names(dsmall) = paste(c("d1_roll3","d2_roll3","d3_roll3","d4_roll3","d5_roll3","d6_roll3","d7_roll3", "d8_roll3", "all_states_path2"), sub, sep="_")
+    nvol = nrow(dsmall)
+    extrarows = 720 - nvol
+    dsmall[nvol+1:extrarows, ] = NA
+    dsmall2 = rbind(dsmall[nvol+1:extrarows, ], dsmall[1:nvol,]) # put NAs at beginning
+    dwide_720_roll3 = cbind(dwide_720_roll3,dsmall2)
+}
+
+
+# can only have numeric columns in matrices:
+all_paths = dwide_720[,grep("idx_raw",names(dwide_720),value=TRUE)]
+all_paths_roll3 = dwide_720_roll3[,grep("all_states_path2",names(dwide_720_roll3),value=TRUE)]
+
+# make matrices
+paths_mat = data.matrix(all_paths)
+paths_r3_mat = data.matrix(all_paths_roll3)
+
+# visualize
+image(paths_mat,col=hcl.colors(8,"RdYlBu"))
+image(paths_r3_mat,col=hcl.colors(8,"RdYlBu"))
+
+# print color scheme
+palette1 = data.matrix(c(1:8))
+image(palette1,col=hcl.colors(8,"RdYlBu"))
+```
+
+Write files:
+```{r}
+
+write.csv(dlong, file = paste0("../Data/Brain_Data/CAP_k8_long_sequence_", Sys.Date(),".csv"),row.names=FALSE)
+
+write.csv(dwide_720_roll3, file = paste0("../Data/Brain_Data/CAP_k8_wide_smoothed_", Sys.Date(),".csv"),row.names=FALSE)
+
+```
+

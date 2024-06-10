@@ -1,0 +1,481 @@
+---
+title: "MRI n-back"
+author: "Elena Peterson"
+date: "2/3/2021"
+output: html_document
+---
+
+Script for computing CAP measures, and maybe merging brain and behavioral data?
+
+Questions:
+check dlong volume labels?
+check pulse time
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load packages & data files 
+```{r}
+#the following csv file was made by manually combining the volume event labels
+# with the CAP output files listing each person's k-means-labeled time series.
+dsmooth <- read.csv("../Data/Brain_Data/CAP_k8_wide_smoothed_events_2024-03-20.csv",header=TRUE,stringsAsFactors = FALSE)
+
+# make sure to fix dlong volume labels
+dlong <- read.csv("../Data/Brain_Data/CAP_k8_long_sequence_2024-03-20.csv",header=TRUE,stringsAsFactors = FALSE)
+
+# subject list
+dsubs = read.csv("../Data/Brain_Data/vols_per_sub.csv",header=TRUE)
+
+# load packages
+library(dplyr)
+library(stringr)
+```
+
+
+Add some more event labels to 720-row file
+```{r}
+# add times in seconds
+dsmooth$voltimes_sec = dsmooth$voltimes/1000
+
+#Categorize events as fixation or block
+dsmooth$voleventbin = ifelse(dsmooth$voleventcat=="Fix", "Fix", "Block")
+
+# track task changes (switching between fixation and task blocks, bidirectionally):
+dsmooth$transitbinary = 0 # default no transition = 0
+allevents = length(dsmooth$voleventbin)
+for (evnt in 2:allevents) {
+  ev2 = dsmooth$voleventbin[evnt]
+  ev1 = dsmooth$voleventbin[evnt-1]
+  
+  if (ev1 != ev2) {
+      # note transition if event changes
+      dsmooth$transitbinary[evnt] = 1 # transition = 1
+  }
+}
+
+# before 1st transition, start with NAs
+dsmooth$transit_dist = NA
+
+# compute distance from previous transition:
+translist = dsmooth$volnum[which(dsmooth$transitbinary == 1)]
+translist = c(translist, 720)  
+    for (i in 1:(length(translist)-1)) {
+      start = translist[i] # volume of transition
+      stop = translist[i+1] # volume of next transition
+      dsmooth$transit_dist[dsmooth$volnum %in% start:(stop-1)] = 0:(stop-start-1)
+    }
+
+```
+
+Use long data to track behavioral lapses & state transitions
+```{r}
+
+names(dlong)
+dim(dlong)
+
+dlong$errors = 0
+
+# track errors for each sub (including non-responses)
+for (sub in dsubs$subid) {
+  # look at subject's data
+  dsmall = mydata[mydata$subid == sub,]
+  
+  # pulsetime is starting time
+  pulsetime <- dsmall$trial_startT[3]
+  
+  # compute times errors occur, convert to volumes
+  error_times = dsmall$trial_startT[dsmall$key_resp_3.corr==0] - pulsetime
+  error_vols = floor(error_times/.8)
+  
+  # mark corresponding volumes in long dataset
+  dlong$errors[dlong$subid==sub & dlong$volnum %in% error_vols] = 1
+}
+
+dlong$errors_resp = 0
+
+# track errors for each sub (NOT including non-responses)
+for (sub in dsubs$subid) {
+  # look at subject's data
+  dsmall = mydata[mydata$subid == sub,]
+  
+  # pulsetime is starting time
+  pulsetime <- dsmall$trial_startT[3]
+  
+  # compute times errors occur, convert to volumes
+  error_rawtimes = dsmall$trial_startT[dsmall$key_resp_3.corr==0 & dsmall$key_resp_3.keys != "None"]
+  error_times = error_rawtimes - pulsetime
+  error_vols = floor(error_times/.8)
+  
+  # mark corresponding volumes in long dataset
+  dlong$errors_resp[dlong$subid==sub & dlong$volnum %in% error_vols] = 1
+}
+
+dlong$long_rts = 0
+
+# track long RTs
+for (sub in dsubs$subid) {
+  # look at subject's data
+  dsmall = mydata[mydata$subid == sub,]
+  
+  # pulsetime is starting time
+  pulsetime <- dsmall$trial_startT[3]
+  
+  # get subject mean and sd to identify long RTs
+  sub_sd = sd(dsmall$key_resp_3.rt, na.rm=T)
+  sub_mean = mean(dsmall$key_resp_3.rt, na.rm=T)
+  
+  # get RTs > 2 sd above mean, compute timing and convert to volume index
+  long_rts = dsmall$key_resp_3.rt[which(dsmall$key_resp_3.rt > (sub_mean+2*sub_sd))]
+  trial_times = dsmall$trial_startT[which(dsmall$key_resp_3.rt > (sub_mean+2*sub_sd))]
+  error_times = long_rts + trial_times - pulsetime
+  error_vols = floor(error_times/.8)
+  
+  # mark corresponding volumes in long dataset
+  dlong$long_rts[dlong$subid==sub & dlong$volnum %in% error_vols] = 1
+}
+
+# convert to continuous measures
+dlong$errors2 = NA # including missed responses
+
+for (sub in dsubs$subid) {
+  # look at subject's data
+  dsmall = dlong[dlong$subid == sub,]
+  errorlist = dsmall$volnums[which(dsmall$errors == 1)]
+  errorlist = c(errorlist, 720)
+  
+  if (length(errorlist) > 1) {
+    for (i in 1:(length(errorlist)-1)) {
+      start = errorlist[i] 
+      stop = errorlist[i+1]
+      dlong$errors2[dlong$subid==sub & dlong$volnums %in% start:(stop-1)] = 0:(stop-start-1)
+    }
+  } else if (length(errorlist == 1)) {
+      next
+  }
+}
+
+# convert to continuous measures
+dlong$errors_resp2 = NA # NOT including missed responses
+
+for (sub in dsubs$subid) {
+  # look at subject's data
+  dsmall = dlong[dlong$subid == sub,]
+  errorlist = dsmall$volnums[which(dsmall$errors_resp == 1)]
+  errorlist = c(errorlist, 720)
+  
+  if (length(errorlist) > 1) {
+    for (i in 1:(length(errorlist)-1)) {
+      start = errorlist[i] 
+      stop = errorlist[i+1]
+      dlong$errors_resp2[dlong$subid==sub & dlong$volnums %in% start:(stop-1)] = 0:(stop-start-1)
+    }
+  } else if (length(errorlist == 1)) {
+      next
+  }
+}
+
+dlong$long_rts2 = NA
+
+for (sub in dsubs$subid) {
+  # look at subject's data
+  dsmall = dlong[dlong$subid == sub,]
+  errorlist = dsmall$volnums[which(dsmall$long_rts == 1)]
+  errorlist = c(errorlist, 720)
+  
+  if (length(errorlist) > 1) {
+    for (i in 1:(length(errorlist)-1)) {
+      start = errorlist[i]
+      stop = errorlist[i+1]
+      dlong$long_rts2[dlong$subid==sub & dlong$volnums %in% start:(stop-1)] = 0:(stop-start-1)
+    }
+  } else if (length(errorlist == 1)) {
+      next
+  } 
+}
+
+# track state changes
+dlong$state_transit = 0
+
+for (sub in dsubs$subid) {
+  # look at subject's data
+  dsmall = dlong[dlong$subid == sub,]
+
+  # track state changes
+  minvol = min(dsmall$volnums)+1
+  maxvol = 719
+
+  for (vol in (minvol+1):maxvol) {
+    s2 = dsmall$all_states_path2[dsmall$volnums==vol]
+    s1 = dsmall$all_states_path2[dsmall$volnums==vol-1]
+  
+    if (s1 != s2) {
+      # mark corresponding volumes in long dataset
+      dlong$state_transit[dlong$subid==sub & dlong$volnum==vol] = 1
+    }
+  }
+}
+
+```
+
+Merge dsmooth event labels with dlong
+```{r}
+dsmooth$volnums = dsmooth$volnum
+dsmooth_events = subset(dsmooth, select = c(voltimes, voleventname1, voleventcat, volblocknum, stimtype, wmload, transit_dist,volnums))
+
+dlong2 = merge(dlong,dsmooth_events,sort=FALSE)
+dlong2 = arrange(dlong2,subid)
+
+```
+
+Create new wide data frame
+```{r}
+# new df for saving metrics by sub
+dwide = data.frame("subid"=dsubs$subid)
+```
+
+Function for computing time-in-state by condition (proportional)
+```{r}
+# define function for computing time-in-state by condition (proportional)
+compute_ts1 = function(event,state) {
+  tslist = c()
+  for (sub in dsubs$subid) {
+    df2 = dlong2[dlong2["subid"]==sub & grepl(event,dlong2$voleventname1) & !is.na(dlong2["all_states_path2"]),]  # select rows for 1 subject
+    nvol = length(df2$subid)
+    blist = which(df2$all_states_path2==state)
+    ts = length(blist)/nvol
+    tslist = c(tslist,ts)
+  }
+  return(tslist)
+}
+```
+
+Compute persistence overall
+Why the warnings?
+```{r}
+# new df with just the final state sequences
+dcat = dsmooth[,grep("all_states_path2",names(dsmooth))]
+nvol = dim(dsmooth)[1]
+states = c(1:8)
+
+#Compute persistence overall:
+for (bs in states) { # for each state
+  ylist = c()
+  
+  for (sub in 1:length(names(dcat))) { #for each subject
+    x = 0
+    xlist = c() 
+    
+    for (vol in 1:nvol) {
+      # Skip NA volumes
+      if (is.na(dcat[vol,sub]==bs)) {
+        next 
+      } else if (dcat[vol,sub]==bs) {
+        x = x+1
+      } else if (x!=0) { 
+          xlist = c(xlist,x)
+          x=0
+        }
+    }
+   y = mean(xlist)
+   ylist = c(ylist,y)
+}
+  assign(paste0("overall_ps_",bs),ylist)
+  dwide[paste0("overall_ps_",bs)] = get(paste0("overall_ps_",bs))
+}
+
+```
+
+Function for computing persistence by block (not "true" persistence because we're chopping up sequence)
+```{r}
+
+# use this when you want to look at persistence within non-adjacent blocks, I think...
+compute_ps1_block = function(event,state) {
+  
+  pslist = c()
+  eventlist = unique(dsmooth$volblocknum[grep(event, dsmooth$voleventname1)])
+  
+  for (sub in dsubs$subid) {
+    
+    xlist = c() # initialize subject list of durations
+    
+    # get block numbers for event type:
+    for (ev in eventlist) {
+      
+      x = 0 # initialize vol count
+      df2 = dlong2[dlong2["subid"]==sub & dlong2["volblocknum"]==ev & !is.na(dlong2["all_states_path2"]),] # select rows for 1 subject
+    
+      if (sum(df2$all_states_path2==state)==0) { #if brain state is absent entirely, then move on to next block
+        next
+      }
+      
+      for (vol in 1:nrow(df2)) { # for each volume
+        if (df2$all_states_path2[vol]==state) { # count if it's the brain state of interest
+          x = x+1
+          if (vol==nrow(df2)) { # if it's the last volume, make sure to record it
+            xlist = c(xlist,x)
+          }
+        } else if (x!=0) { # if the brain state changes, record the duration and move on
+          xlist = c(xlist,x)
+          x=0
+        }
+      }
+    } # end block loop
+    
+    # if a state is absent from all blocks, record as NA
+    if (length(xlist)==0) {
+      ps = NA
+    } else {
+      ps = mean(xlist) #average dur for all blocks for one sub 
+    }
+    pslist = c(pslist,ps)
+  } # end subject loop
+  return(pslist)
+}
+
+```
+
+Count specific A-B transitions
+```{r}
+# state 1 is DMN, state 6 is FPN, maybe also look at state 4 even if it's not so responsive to WM load
+# focus on FPN into DMN (6 into 1, or 4 into 1)
+
+trlist61 = c()
+  for (sub in 1:length(names(dcat))) { #for each subject
+    
+    # concatenate column
+    seq1 = unlist(dcat[sub])
+    seq_char = paste(seq1, collapse= " ")
+    trcount = str_count(string=seq_char, pattern="6 1") # replace numbers with state pair of interest
+    trlist61 = c(trlist61, trcount)
+    }
+    
+ dwide$trx_61 = trlist61
+ 
+ trlist41 = c()
+  for (sub in 1:length(names(dcat))) { #for each subject
+    
+    # concatenate column
+    seq1 = unlist(dcat[sub])
+    seq_char = paste(seq1, collapse= " ")
+    trcount = str_count(string=seq_char, pattern="4 1") # replace numbers with state pair of interest
+    trlist41 = c(trlist41, trcount)
+    }
+    
+ dwide$trx_41 = trlist41
+ 
+ # look at DMN into FPN
+trlist16 = c()
+  for (sub in 1:length(names(dcat))) { #for each subject
+    
+    # concatenate column
+    seq1 = unlist(dcat[sub])
+    seq_char = paste(seq1, collapse= " ")
+    trcount = str_count(string=seq_char, pattern="1 6") # replace numbers with state pair of interest
+    trlist16 = c(trlist16, trcount)
+    }
+    
+dwide$trx_16 = trlist16
+
+cor.test(dwide$trx_16, dwide$trx_61) # correlated, r= .28
+
+```
+
+Add overall CAP measures to wide format file
+```{r}
+dwide$overall_ts_1 = compute_ts1("*",state=1)
+dwide$overall_ts_2 = compute_ts1("*",state=2)
+dwide$overall_ts_3 = compute_ts1("*",state=3)
+dwide$overall_ts_4 = compute_ts1("*",state=4)
+dwide$overall_ts_5 = compute_ts1("*",state=5)
+dwide$overall_ts_6 = compute_ts1("*",state=6)
+dwide$overall_ts_7 = compute_ts1("*",state=7)
+dwide$overall_ts_8 = compute_ts1("*",state=8)
+
+dwide$ts_1_0back = compute_ts1("0Back",state=1)
+dwide$ts_2_0back = compute_ts1("0Back",state=2)
+dwide$ts_3_0back = compute_ts1("0Back",state=3)
+dwide$ts_4_0back = compute_ts1("0Back",state=4)
+dwide$ts_5_0back = compute_ts1("0Back",state=5)
+dwide$ts_6_0back = compute_ts1("0Back",state=6)
+dwide$ts_7_0back = compute_ts1("0Back",state=7)
+dwide$ts_8_0back = compute_ts1("0Back",state=8)
+
+dwide$ts_1_2back = compute_ts1("2Back",state=1)
+dwide$ts_2_2back = compute_ts1("2Back",state=2)
+dwide$ts_3_2back = compute_ts1("2Back",state=3)
+dwide$ts_4_2back = compute_ts1("2Back",state=4)
+dwide$ts_5_2back = compute_ts1("2Back",state=5)
+dwide$ts_6_2back = compute_ts1("2Back",state=6)
+dwide$ts_7_2back = compute_ts1("2Back",state=7)
+dwide$ts_8_2back = compute_ts1("2Back",state=8)
+
+dwide$ps_1_0back = compute_ps1_block("0Back",state=1)
+dwide$ps_2_0back = compute_ps1_block("0Back",state=2)
+dwide$ps_3_0back = compute_ps1_block("0Back",state=3)
+dwide$ps_4_0back = compute_ps1_block("0Back",state=4)
+dwide$ps_5_0back = compute_ps1_block("0Back",state=5)
+dwide$ps_6_0back = compute_ps1_block("0Back",state=6)
+dwide$ps_7_0back = compute_ps1_block("0Back",state=7)
+dwide$ps_8_0back = compute_ps1_block("0Back",state=8)
+
+dwide$ps_1_2back = compute_ps1_block("2Back",state=1)
+dwide$ps_2_2back = compute_ps1_block("2Back",state=2)
+dwide$ps_3_2back = compute_ps1_block("2Back",state=3)
+dwide$ps_4_2back = compute_ps1_block("2Back",state=4)
+dwide$ps_5_2back = compute_ps1_block("2Back",state=5)
+dwide$ps_6_2back = compute_ps1_block("2Back",state=6)
+dwide$ps_7_2back = compute_ps1_block("2Back",state=7)
+dwide$ps_8_2back = compute_ps1_block("2Back",state=8)
+
+#fix
+dwide$ts_1_fix = compute_ts1("Fix",state=1)
+dwide$ts_2_fix = compute_ts1("Fix",state=2)
+dwide$ts_3_fix = compute_ts1("Fix",state=3)
+dwide$ts_4_fix = compute_ts1("Fix",state=4)
+dwide$ts_5_fix = compute_ts1("Fix",state=5)
+dwide$ts_6_fix = compute_ts1("Fix",state=6)
+dwide$ts_7_fix = compute_ts1("Fix",state=7)
+dwide$ts_8_fix = compute_ts1("Fix",state=8)
+
+```
+
+Should not need to rerun steps above. Start here.
+
+Additional measures derived from TS, PS, or TRX
+```{r}
+dwide <- read.csv("../Data/Brain_Data/CAP_measures_overall_2024-04-10.csv",header=TRUE,stringsAsFactors = FALSE)
+
+names(dwide)
+
+# these can be summed because they are proportions
+dwide$ts_1267 = dwide$overall_ts_1 + dwide$overall_ts_2 + dwide$overall_ts_6 + dwide$overall_ts_7
+dwide$ts_3458 = dwide$overall_ts_3 + dwide$overall_ts_4 + dwide$overall_ts_5 + dwide$overall_ts_8
+
+all_ps = subset(dwide, select=grep("overall_ps", names(dwide),value=TRUE))
+
+dwide$all_ps = rowMeans(all_ps, na.rm=T)
+
+dwide_ts = dwide[,grep("ts",names(dwide), value=TRUE)]
+dwide_2b = dwide_ts[,grep("2back",names(dwide_ts), value=TRUE)]
+dwide_0b = dwide_ts[,grep("0back",names(dwide_ts), value=TRUE)]
+
+dwide$fav_2back = apply(dwide_2b,1,which.max)
+dwide$fav_0back = apply(dwide_0b,1,which.max)
+
+dfav6 = dwide[dwide$fav_2back==6,]
+dfav4 = dwide[dwide$fav_2back==4,]
+dim(dfav6); dim(dfav4);
+
+# unclear how these groups differ
+```
+Write out files
+```{r}
+
+#this file contains the overall time-in-state, persistence, and precedent network measures for each person.
+write.csv(dwide,file = paste0("../Data/Brain_Data/CAP_measures_overall_", Sys.Date(),".csv"),row.names=FALSE)
+
+#this file contains the volume by volume events in long form...
+write.csv(dlong2,file = paste0("../Data/Brain_Data/CAP_k8_long_sequence_", Sys.Date(),".csv"),row.names=FALSE)
+
+```

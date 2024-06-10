@@ -1,0 +1,209 @@
+---
+title: "SCID_scoring"
+author: "Elena Peterson"
+date: "2024-04-07"
+output: html_document
+---
+
+
+```{r}
+library(dplyr)
+
+scid = read.csv("../Data/SCID_Data/RRAY_SCIDScore_April+7,+2024_12.50_char_forR_cleaned.csv",stringsAsFactors = FALSE, header = TRUE)
+```
+
+
+```{r}
+head(names(scid))
+scid$participant = substr(scid$Subject.ID.,1,7)
+
+
+sublist = sort(unique(scid$participant))
+sublist = sublist[nchar(sublist)==7]
+
+scored = data.frame("participant" = sublist, "index"=1:length(sublist))
+
+```
+
+
+```{r}
+# Start with S1 diagnoses
+scid1 = scid[grep("S1",scid$Subject.ID),]
+
+dim(scid1)
+
+```
+
+```{r}
+# merge with n=157 dataset
+dwide = read.csv("../Data/Merged_Data/Merged_Data_Wide_2024-04-16.csv",stringsAsFactors = FALSE, header = TRUE)
+dim(dwide)
+names(dwide)
+
+dwide2 = dwide[dwide$participant!="RRAY001" & dwide$participant!="RRAY146",]
+dim(dwide2)
+
+allscid = merge(dwide2, scid1, all.x = TRUE)
+dim(allscid)
+```
+
+Start with S1 Data
+```{r}
+
+# easier way...
+scid_print = function(x) {
+  cur = paste0("CURRENT.",x)
+  past = paste0("PAST.",x)
+  print(table(allscid[cur]))
+  sum(table(allscid[cur]))
+  print(table(allscid[past]))
+  sum(table(allscid[past]))
+}
+
+scid_print("Major.Depressive.Disorder")
+scid_print("Persistent.Depressive.Disorder")
+scid_print("Bipolar.Disorder.I")
+scid_print("Bipolar.Disorder.II")
+scid_print("Bipolar.NOS")
+
+scid_print("Agoraphobia")
+scid_print("Generalized.Anxiety.Disorder") # missing past...
+scid_print("Panic.Disorder")
+scid_print("Social.Anxiety")
+
+scid_print("Alcohol.Use.Disorder")
+scid_print("Alcohol.Severity")
+
+scid_print("Substance.Use.Disorder")
+scid_print("Substance.Severity")
+
+# eating disorders
+scid_print("Anorexia.Nervosa")
+scid_print("Bulimia.Nervosa")
+scid_print("Binge.Eating.Disorder")
+
+# others
+scid_print("ADHD")
+scid_print("Obsessive.Compulsive.Disorder")
+scid_print("PTSD")
+```
+
+
+Start with S2 Data
+```{r}
+# start with binary yes/no for lifetime at that session
+
+# MDE
+scid2$MDE_S2 = ifelse(scid2$CURRENT.Major.Depressive.Episode == 3 | scid2$PAST.Major.Depressive.Episode == 3, 1, 0)
+
+# Dysthmic
+scid2$Dyst_S2 = ifelse(scid2$CURRENT.Dysthymic.Episode == 3 | scid2$PAST.Dysthymic.Episode == 3, 1, 0)
+
+# Manic/Hypomanic Episode
+scid2$Man_S2 = ifelse(scid2$CURRENT.Manic.Episode == 3 | scid2$PAST.Manic.Episode == 3, 1, 0)
+scid2$HM_S2 = ifelse(scid2$CURRENT.Hypomanic.Episode == 3 | scid2$PAST.Hypomanic.Episode == 3, 1, 0)
+
+# Anxiety disorders
+scid2$AnxNOS_S2 = ifelse(scid2$CURRENT.Anxiety.NOS == 3 | scid2$PAST.Anxiety.NOS == 3, 1, 0)
+scid2$GAD_S2 = ifelse(scid2$CURRENT.Generalized.Anxiety.Disorder == 3 | scid2$PAST.Generalized.Anxiety.disorder == 3, 1, 0)
+scid2$AGR_S2 = ifelse(scid2$CURRENT.Agoraphobia == 3 | scid2$PAST.Agoraphobia == 3, 1, 0)
+scid2$Panic_S2 = ifelse(scid2$CURRENT.Panic.Disorder == 3 | scid2$PAST.Panic.Disorder == 3, 1, 0)
+scid2$Phobia_S2 = ifelse(scid2$CURRENT.Specific.Phobia == 3 | scid2$PAST.Specific.Phobia == 3, 1, 0)
+scid2$Soc_S2 = ifelse(scid2$CURRENT.Social.Anxiety == 3 | scid2$PAST.Social.Anxiety == 3, 1, 0)
+scid2$OCD_S2 = ifelse(scid2$CURRENT.Obsessive.Compulsive.Disorder == 3 | scid2$PAST.Obsessive.Compulsive.Disorder == 3, 1, 0)
+
+# Substance use
+scid2$Substance_S2 = ifelse(scid2$CURRENT.Substance.Use.Disorder == 3 | scid2$PAST.Substance.Use.Disorder == 3, 1, 0)
+scid2$Alcohol_S2 = ifelse(scid2$CURRENT.Alcohol.Use.Disorder == 3 | scid2$PAST.Alcohol.Use.Disorder == 3, 1, 0)
+
+
+# PTSD or Acute Stress
+scid2$Acute_S2 = ifelse(scid2$CURRENT.Acute.Stress.Disorder == 3, 1, 0)
+scid2$PTSD_S2 = ifelse(scid2$CURRENT.PTSD == 3 | scid2$PAST.PTSD == 3, 1, 0)
+
+# Eating disorders
+scid2$Anorexia_S2 = ifelse(scid2$CURRENT.Anorexia.Nervosa == 3 | scid2$PAST.Anorexia.Nervosa == 3, 1, 0)
+scid2$Bulimia_S2 = ifelse(scid2$CURRENT.Bulimia.Nervosa == 3 | scid2$PAST.Bulimia.Nervosa == 3, 1, 0)
+scid2$Binge_S2 = ifelse(scid2$CURRENT.Binge.Eating.Disorder == 3 | scid2$PAST.Binge.Eating.Disorder == 3, 1, 0)
+
+# total diagnoses at baseline:
+newcols = grep("S2", names(scid2), value=TRUE)
+
+scid2x = subset(scid2, select=newcols)
+
+scid2$total_diagnoses_S2 = rowSums(scid2x, na.rm=T)
+
+scid2x = subset(scid2, select=c(newcols, "participant", "total_diagnoses_S2"))
+
+```
+
+
+```{r}
+# merge with wide dataset (1 row per participant)
+
+scid_wide = merge(scored, scid1x, all=TRUE)
+scid_wide = merge(scid_wide, scid2x, all=TRUE)
+
+```
+
+Track change over time
+```{r}
+# New mood experiences:
+scid_wide$MDE_new = ifelse(scid_wide$MDE_S1==0 & scid_wide$MDE_S2==1, 1, 0)
+scid_wide$Manic_new = ifelse(scid_wide$Man_S1==0 & scid_wide$Man_S1==1, 1, 0)
+scid_wide$Hypomanic_new = ifelse(scid_wide$HM_S1==0 & scid_wide$HM_S1==1, 1, 0)
+scid_wide$Dyst_new = ifelse(scid_wide$Dyst_S1==0 & scid_wide$Dyst_S1==1, 1, 0)
+
+scid_wide$Mood_new = ifelse(scid_wide$MDE_new==1 | scid_wide$Manic_new==1 | scid_wide$Hypomanic_new==1 | scid_wide$Dyst_new==1, 1, 0)
+
+# New Anxiety experiences:
+scid_wide$AnxNOS_new = ifelse(scid_wide$AnxNOS_S1==0 & scid_wide$AnxNOS_S2==1, 1, 0)
+scid_wide$GAD_new = ifelse(scid_wide$GAD_S1==0 & scid_wide$GAD_S2==1, 1, 0)
+scid_wide$AGR_new = ifelse(scid_wide$AGR_S1==0 & scid_wide$AGR_S2==1, 1, 0)
+scid_wide$Panic_new = ifelse(scid_wide$Panic_S1==0 & scid_wide$Panic_S2==1, 1, 0)
+scid_wide$Phobia_new = ifelse(scid_wide$Phobia_S1==0 & scid_wide$Phobia_S2==1, 1, 0)
+scid_wide$Soc_new = ifelse(scid_wide$Soc_S1==0 & scid_wide$Soc_S2==1, 1, 0)
+scid_wide$OCD_new = ifelse(scid_wide$OCD_S1==0 & scid_wide$OCD_S2==1, 1, 0)
+
+# Substance use
+scid_wide$Substance_new = ifelse(scid_wide$Substance_S1==0 & scid_wide$Substance_S2==1, 1, 0)
+scid_wide$Alcohol_new = ifelse(scid_wide$Alcohol_S1==0 & scid_wide$Alcohol_S2==1, 1, 0)
+
+# PTSD or Acute Stress
+scid_wide$Acute_new = ifelse(scid_wide$Acute_S1==0 & scid_wide$Acute_S2==1, 1, 0)
+scid_wide$PTSD_new = ifelse(scid_wide$PTSD_S1==0 & scid_wide$PTSD_S2==1, 1, 0)
+
+# Eating disorders
+scid_wide$Anorexia_new = ifelse(scid_wide$Anorexia_S1==0 & scid_wide$Anorexia_S2==1, 1, 0)
+scid_wide$Bulimia_new = ifelse(scid_wide$Bulimia_S1==0 & scid_wide$Bulimia_S2==1, 1, 0)
+scid_wide$Binge_new = ifelse(scid_wide$Binge_S1==0 & scid_wide$Binge_S2==1, 1, 0)
+
+# count all new
+newcols = grep("new", names(scid_wide), value=TRUE)
+
+scid_wide2 = subset(scid_wide, select=newcols)
+
+scid_wide$new_diagnoses = rowSums(scid_wide2,na.rm=T)
+
+scid_wide$new_diagnoses_bin = ifelse(scid_wide$new_diagnoses>0, 1, 0)
+
+#scide_wide_sort = scid_wide[c("participant", "MDE_S1", "MDE_S2", "MDE_new", "Dyst_S1", "Dyst_S2", "Dyst_new", 
+#                              "Man_S1", "Man_S2", "Manic_new","HM_S1", "HM_S2", "HM_new",
+#                              "AnxNOS_S1", "AnxNOS_S2", "AnxNOS_new", "AnxNOS_S1", "AnxNOS_S2", "AnxNOS_new",)]
+
+scid_wide_sort = scid_wide[,sort(names(scid_wide))]
+
+# lots of NAs to be cleaned up... make sure aggregates are not losing info...
+# ask jenna if this is most up to date data.
+sum(scid_wide$MDE_new, na.rm = T)
+sum(scid_wide$Mood_new, na.rm = T)
+sum(scid_wide$new_diagnoses_bin, na.rm = T)
+sum(scid_wide$MDE_S1, na.rm = T) #49
+sum(scid_wide$MDE_S2, na.rm = T) #33
+
+```
+
+```{r}
+write.csv(scid_wide_sort, paste0("../Data/SCID_Data/SCID_Scored_",Sys.Date(),".csv"), row.names=FALSE)
+
+```

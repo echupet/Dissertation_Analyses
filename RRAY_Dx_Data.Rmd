@@ -1,0 +1,286 @@
+---
+title: "RRAY Data"
+author: "Elena Peterson"
+date: '2024-01-29'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+# start from raw data
+
+# 3 qualtrics surveys:
+
+qb = read.csv("../Data/Raw_Survey_Data/Qualtrics/Baseline+Survey_February+1,+2024_10.28_For-R.csv",stringsAsFactors = FALSE,header=TRUE)
+
+qb2 = read.csv("../Data/Raw_Survey_Data/Qualtrics/Baseline+Survey+(No+CBCL)_February+1,+2024_10.27_For-R.csv",stringsAsFactors = FALSE,header=TRUE)
+
+qb3 = read.csv("../Data/Raw_Survey_Data/Qualtrics/Updated_RRAY_InPerson_April+1,+2024_10.41_For-R.csv",stringsAsFactors = FALSE,header=TRUE)
+
+# 4 redcap surveys (daily diary 2 has no BDI data):
+
+r3 = read.csv("../Data/Raw_Survey_Data/Redcap/RRAY3month_DATA_2024-04-01_1016.csv",stringsAsFactors = FALSE,header=TRUE)
+
+r24 = read.csv("../Data/Raw_Survey_Data/Redcap/RRAY24month_DATA_2024-04-01_1034.csv", stringsAsFactors = FALSE,header=TRUE)
+
+d1 = read.csv("../Data/Raw_Survey_Data/Redcap/RRAYDailyDiary_DATA_2024-01-25_1353.csv", stringsAsFactors = FALSE,header=TRUE)
+
+d3 = read.csv("../Data/Raw_Survey_Data/Redcap/RRAYDailyDiary3_DATA_2024-04-01_1013.csv", stringsAsFactors = FALSE,header=TRUE)
+
+
+
+```
+
+
+```{r}
+# start with qualtrics data
+
+qb_sub = subset(qb, select=c("subid","StartDate",grep("BDI",names(qb),value=TRUE)))
+qb2_sub = subset(qb2, select=c("subid","StartDate",grep("BDI",names(qb2),value=TRUE)))
+qb3_sub = subset(qb3, select=c("subid","StartDate",grep("BDI",names(qb3),value=TRUE)))
+
+```
+
+```{r}
+# then redcap data
+
+r3_sub = subset(r3, select=c("redcap_survey_identifier","month_timestamp",grep("bdi",names(r3),value=TRUE)))
+r24_sub = subset(r24, select=c("redcap_survey_identifier","month_timestamp",grep("bdi",names(r24),value=TRUE)))
+
+d1_sub = subset(d1, select=c("redcap_survey_identifier","daily_diary_timestamp",grep("bdi",names(d1),value=TRUE)))
+d3_sub = subset(d3, select=c("redcap_survey_identifier","daily_diary_timestamp",grep("bdi",names(d3),value=TRUE)))
+
+# for merging:
+names(d1_sub)[names(d1_sub)=="daily_diary_timestamp"] = "month_timestamp"
+names(d1_sub)[grep("bdi",names(d1_sub))] = gsub("2_", "_", grep("bdi",names(d1_sub), value=TRUE))
+
+names(d3_sub)[names(d3_sub)=="daily_diary_timestamp"] = "month_timestamp"
+```
+
+```{r}
+# make some changes to allow merging
+
+# who is NPM160?
+
+# merge qualtrics data first:
+all_q = merge(qb_sub, qb2_sub, all=TRUE)
+all_q = merge(all_q, qb3_sub, all=TRUE)
+
+
+# then redcap data:
+all_month = merge(r3_sub, r24_sub, all=TRUE)
+all_dd = merge(d1_sub, d3_sub, all=TRUE)
+all_rc = merge(all_month, all_dd, all=TRUE)
+
+# then prepare to merge qualtrics and recap:
+
+all_q$date_for_r = as.Date(all_q$StartDate, tryFormats = c("%m/%d/%y %H:%M"))
+all_rc$date_for_r = as.Date(all_rc$month_timestamp, tryFormats = c("%Y-%m-%d %H:%M:%S"))
+
+names(all_rc)[names(all_rc)=="redcap_survey_identifier"] = "subid"
+
+names(all_q) = tolower(names(all_q))
+
+all_bdi = merge(all_q, all_rc, all=TRUE)
+
+all_bdi$subid = gsub(" ", "", all_bdi$subid)
+
+all_bdi$participant = substr(all_bdi$subid, 1, 7)
+
+all_bdi$session = ifelse(grepl("S1",all_bdi$subid), 1, 
+                         ifelse(grepl("S2",all_bdi$subid), 12,
+                                ifelse(grepl("D01", all_bdi$subid), "D1",
+                                    ifelse(grepl("D", all_bdi$subid),substr(all_bdi$subid, 9,10),NA))))
+
+# I think I want to drop the D01 entries
+
+all_bdi = all_bdi[-which(all_bdi$session=="D1"),]
+
+```
+
+
+
+```{r}
+# function for scoring BDI
+
+#Was BDI 19 supposed to be missing?
+
+#compare to qualtrics function...
+
+### Scoring for Beck Depressive Inventory II (BDI-II)
+BDI_Redcap<- function(input){
+  # Subset bdi2 items from rest of surveys
+  bdi2_start_pos<-match("bdi_1",names(input))
+  bdi2_end_pos<-match("bdi_21",names(input))
+  bdi2_new<-input[bdi2_start_pos:bdi2_end_pos]
+  # Change bdi2_16 and bdi2_18 to numeric
+  bdi2_new$bdi_16 <- as.numeric(gsub("[^0-9]","",as.character(bdi2_new$bdi_16))) 
+  bdi2_new$bdi_18 <- as.numeric(gsub("[^0-9]","",as.character(bdi2_new$bdi_18))) 
+  #sum scores
+  bdi2_total_score<-rowSums(bdi2_new,na.rm=FALSE)
+
+  list(bdi2_total_score)
+}
+
+```
+
+
+```{r}
+# score extra raw data
+
+all_bdi$bdi2_total = BDI_Redcap(all_bdi)[[1]]
+
+all_bdi = all_bdi[!is.na(all_bdi$bdi_1),]
+
+all_bdi$session = as.numeric(all_bdi$session)
+all_bdi$unique_id = paste0(all_bdi$participant, all_bdi$session)
+```
+
+```{r}
+# read in cleaned data for demographics
+dem = read.csv("../Data/Cleaned_Survey_Data/RRAY_Baseline_Clean_09262023_Dates.csv",stringsAsFactors = FALSE,header=TRUE)
+```
+
+
+```{r}
+
+dem_sub = subset(dem,select=c("participant","age", "sex"))
+
+all_bdi_dem = merge(all_bdi, dem_sub, all=T)
+
+all_bdi_dem = all_bdi_dem[all_bdi_dem$participant!="",]
+
+
+all_bdi_dem$days_since_baseline = NA
+
+# check why some baseline data is missing...
+for (sub in unique(all_bdi_dem$participant)) {
+  start_date = all_bdi_dem$date_for_r[all_bdi_dem$participant==sub & all_bdi_dem$session==1]
+  if (length(start_date)==0) { next }
+  idx = which(all_bdi_dem$participant==sub)
+  all_bdi_dem$days_since_baseline[idx] = as.numeric(all_bdi_dem$date_for_r[idx] - start_date)
+}
+
+
+all_bdi_dem$age_estimate = all_bdi_dem$age + all_bdi_dem$days_since_baseline/365
+
+#all_bdi_dem_3obs = all_bdi_dem[-which(all_bdi_dem$participant %in% bad_subs),] #984 total observations (1074 previously)
+
+dim(all_bdi_dem) #1049
+
+
+```
+
+Read in old merged data, check what's missing in each
+
+```{r}
+m1 = read.csv("../Data/Cleaned_Survey_Data/RRAY_All_BDI2024-03-25.csv",stringsAsFactors = FALSE,header=TRUE)
+
+m1 = m1[-which(m1$session=="D01"),]
+m1 = m1[-which(is.na(m1$bdi2_total)),]
+m1$unique_id = paste0(m1$participant, m1$session)
+
+length(m1$unique_id) #1020
+length(all_bdi_dem$unique_id) #1049
+
+
+old_NotIn_new =which(!(m1$unique_id %in% all_bdi_dem$unique_id))
+new_NotIn_old =which(!(all_bdi_dem$unique_id %in% m1$unique_id))
+
+length(which(m1$unique_id %in% all_bdi_dem$unique_id)) #1014
+length(which(all_bdi_dem$unique_id %in% m1$unique_id)) #1032
+
+
+length(old_NotIn_new) #4
+length(new_NotIn_old) #17
+
+m1$unique_id[old_NotIn_new] # "RRAY0161"  "RRAY0191"  "RRAY0461"  "RRAY0601"
+all_bdi_dem$unique_id[new_NotIn_old] # "NPM160NA"  NA "RRAY02612" "RRAY060NA" "RRAY0616"  "RRAY08221" NA NA          "RRAY17021" "RRAY17024" NA   "RRAY17521" "RRAY17518" "RRAY17815" "RRAY17915" "RRAY17912" "test003NA"
+
+# start with old data because I trust it more, but add in new entries
+
+new_small = all_bdi_dem[new_NotIn_old,]
+new_small = new_small[grep("RRAY",new_small$participant),]
+dim(new_small) # 15
+
+# for now, drop rray060s3 because idk what it's supposed to be...
+new_small = new_small[-which(new_small$unique_id=="RRAY060NA"),]
+
+all_bdi_dem2 = merge(m1, new_small, all=TRUE)
+```
+
+
+```{r}
+# check overall counts...
+bdi_count = as.data.frame(table(all_bdi_dem2$participant))
+names(bdi_count) = c("participant","n_timepoints")
+bdi_count
+
+length(bdi_count$participant[bdi_count$n_timepoints==1]) # 32
+length(bdi_count$participant[bdi_count$n_timepoints<=2]) # 44
+length(bdi_count$participant[bdi_count$n_timepoints<=3]) # 48
+
+bdi_count$participant[bdi_count$n_timepoints==10] # none
+
+
+# make sure to check bdi calculations & subject alignment
+bad_subs = as.character(bdi_count$participant[bdi_count$n_timepoints<=2])
+bad_subs
+
+#"NPM160"  "RRAY001" "RRAY004" "RRAY008" "RRAY010" "RRAY014" "RRAY016" "RRAY017" "RRAY018" "RRAY019" "RRAY020"
+#"RRAY021" "RRAY023" "RRAY024" "RRAY034" "RRAY040" "RRAY044" "RRAY045" "RRAY047" "RRAY050" "RRAY055" "RRAY062"
+# "RRAY072" "RRAY079" "RRAY084" "RRAY095" "RRAY110" "RRAY116" "RRAY118" "RRAY122" "RRAY141" "RRAY145" "RRAY146"
+# "RRAY148" "RRAY155" "RRAY157" "RRAY160" "RRAY167" "RRAY168" "RRAY172" "RRAY173" "RRAY174" "RRAY176" "RRAY177"
+# "test003"
+
+
+hist(bdi_count$n_timepoints)
+
+all_bdi_dem3 = merge(all_bdi_dem2, bdi_count, all=TRUE)
+
+# should merge bdi counts after adding NAs... same for all other between measures
+# check NA sessions
+```
+
+
+```{r}
+write.csv(all_bdi_dem3, paste0("../Data/Cleaned_Survey_Data/RRAY_All_BDI_", Sys.Date(), ".csv"),row.names = FALSE)
+```
+
+then, add in empty rows for BDI data
+```{r}
+#dim(depx_old)
+dim(all_bdi_dem3)
+
+names(all_bdi_dem3)
+
+all_bdi_dem3 = arrange(all_bdi_dem3, participant)
+
+sublist = unique(all_bdi_dem3$participant)
+nsubs = length(sublist) # 137 participants
+nsubs
+
+sessions = c(1, 3, 6, 9, 12, 15, 18, 21, 24)
+depx_all = data.frame("session"=rep(sessions, nsubs), "participant"=rep(sublist, each=9))
+
+depx_NAs = merge(depx_all, all_bdi_dem3, all=TRUE)
+
+depx_NAs2 = subset(depx_NAs, select=c("participant", "session", "age_estimate", "days_since_baseline", "bdi2_total","date_standard", "n_timepoints"))
+
+# add this in here so it fills in all rows...
+dem_small = subset(dem, select=c("participant", "age", "sex"))
+
+dem_small$sex_contrast = ifelse(dem_small$sex == 1, -1, ifelse(dem_small$sex==2, 1, NA))
+
+depx_NAs3 = merge(depx_NAs2, dem_small, all=T)
+
+depx_NAs3 = depx_NAs3[depx_NAs3$participant!="",]
+
+write.csv(depx_NAs2, paste0("../Data/Merged_Data/RRAY_All_BDI_9s_", Sys.Date(), ".csv"), row.names = FALSE)
+
+```
+
