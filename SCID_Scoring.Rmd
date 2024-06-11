@@ -11,6 +11,7 @@ Script for summarizing SCID diagnoses
 library(dplyr)
 
 scid = read.csv("../Data/SCID_Data/RRAY_SCIDScore_April+7,+2024_12.50_char_forR_cleaned.csv",stringsAsFactors = FALSE, header = TRUE)
+
 ```
 
 
@@ -19,21 +20,20 @@ scid = read.csv("../Data/SCID_Data/RRAY_SCIDScore_April+7,+2024_12.50_char_forR_
 head(names(scid))
 scid$participant = substr(scid$Subject.ID.,1,7)
 
-# initialize new data frame with list of particiapnts
-sublist = sort(unique(scid$participant))
-sublist = sublist[nchar(sublist)==7]
-scored = data.frame("participant" = sublist, "index"=1:length(sublist))
-
-```
-
-
-```{r}
 # Start with S1 diagnoses
 scid1 = scid[grep("S1",scid$Subject.ID),]
 
-dim(scid1)
+# select diagnosis columns- columns containing the words "current"/"past" and not containing "symptoms"
+diag_cols = names(scid)[(grepl("CURRENT",names(scid)) | grepl("PAST",names(scid))) & !grepl("Symptoms",names(scid))]
 
+scid1 = subset(scid1, select=c("participant", diag_cols))
+dim(scid1) # 175
+
+# convert NAs to 1's (should indicate absence of diagnosis)
+scid1[is.na(scid1)] = 1
 ```
+
+
 
 ```{r}
 # merge with n=157 dataset
@@ -41,6 +41,7 @@ dwide = read.csv("../Data/Merged_Data/Merged_Data_Wide_2024-04-16.csv",stringsAs
 dim(dwide)
 names(dwide)
 
+# 2 more subjects to exclude
 dwide2 = dwide[dwide$participant!="RRAY001" & dwide$participant!="RRAY146",]
 dim(dwide2)
 
@@ -51,8 +52,20 @@ dim(allscid)
 Start with S1 Data
 ```{r}
 
-# easier way...
+# function that finds current & past diagnoses and generates table of proportions
+# x is name of diagnosis as written in scid file, without the CURRENT./PAST. prefix
 scid_print = function(x) {
+  cur = paste0("CURRENT.",x)
+  past = paste0("PAST.",x)
+  print(prop.table(table(allscid[cur])))
+  print(sum(table(allscid[cur])))
+  print(prop.table(table(allscid[past])))
+  print(sum(table(allscid[past])))
+}
+
+# function that finds current & past diagnoses and generates table of number of subjects
+# x is name of diagnosis as written in scid file, without the CURRENT./PAST. prefix
+scid_print_num = function(x) {
   cur = paste0("CURRENT.",x)
   past = paste0("PAST.",x)
   print(table(allscid[cur]))
@@ -69,30 +82,30 @@ scid_print = function(x) {
 
 # Mood disorders
 scid_print("Major.Depressive.Disorder")
-scid_print("Persistent.Depressive.Disorder") # 156
+scid_print("Persistent.Depressive.Disorder")
 scid_print("Bipolar.Disorder.I")
 scid_print("Bipolar.Disorder.II")
 scid_print("Bipolar.NOS")
 
 # Anxiety disorders
-scid_print("Agoraphobia") # 149
-scid_print("Generalized.Anxiety.Disorder") # 151
-scid_print("Panic.Disorder") # 147, 148
-scid_print("Social.Anxiety") # 148
+scid_print("Agoraphobia") 
+scid_print("Generalized.Anxiety.Disorder") 
+scid_print("Panic.Disorder") 
+scid_print("Social.Anxiety")
 
 # Alcohol & Substance
-scid_print("Alcohol.Use.Disorder") # 153
+scid_print("Alcohol.Use.Disorder")
 scid_print("Alcohol.Severity")
-scid_print("Substance.Use.Disorder") # 153
+scid_print("Substance.Use.Disorder")
 scid_print("Substance.Severity")
 
 # eating disorders
-scid_print("Anorexia.Nervosa") # 153
-scid_print("Bulimia.Nervosa") # 152
-scid_print("Binge.Eating.Disorder") # 152
+scid_print("Anorexia.Nervosa")
+scid_print("Bulimia.Nervosa")
+scid_print("Binge.Eating.Disorder")
 
 # others
-scid_print("ADHD") # 143, 141
-scid_print("Obsessive.Compulsive.Disorder") # 150, 151
-scid_print("PTSD") # 147, 146
+scid_print("ADHD")
+scid_print("Obsessive.Compulsive.Disorder")
+scid_print("PTSD")
 ```
