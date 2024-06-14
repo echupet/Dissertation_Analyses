@@ -27,6 +27,9 @@ dlong <- read.csv("../Data/Brain_Data/CAP_k8_long_sequence_2024-03-20.csv",heade
 # subject list
 dsubs = read.csv("../Data/Brain_Data/vols_per_sub.csv",header=TRUE)
 
+# merged raw task data
+dtask <- read.csv("../Data/Brain_Data/nback_raw_merge_2024-03-29.csv",header=TRUE)
+
 # load packages
 library(dplyr)
 library(stringr)
@@ -66,6 +69,58 @@ translist = c(translist, 720)
       dsmooth$transit_dist[dsmooth$volnum %in% start:(stop-1)] = 0:(stop-start-1)
     }
 
+# Also track unidirectional transitions:
+# transitions into task blocks
+dsmooth$task_entries = 0 # default no transition = 0
+allevents = length(dsmooth$voleventbin)
+for (evnt in 2:allevents) {
+  ev2 = dsmooth$voleventbin[evnt]
+  ev1 = dsmooth$voleventbin[evnt-1]
+  
+  if (ev1 == "Fix" & ev2 == "Block") {
+      # note transition if event changes
+      dsmooth$task_entries[evnt] = 1 # transition = 1
+  }
+}
+
+# before 1st transition, start with NAs
+dsmooth$task_entries_dist = NA
+
+# compute distance from previous transition:
+translist = dsmooth$volnum[which(dsmooth$task_entries == 1)]
+translist = c(translist, 720)  
+    for (i in 1:(length(translist)-1)) {
+      start = translist[i] # volume of transition
+      stop = translist[i+1] # volume of next transition
+      dsmooth$task_entries_dist[dsmooth$volnum %in% start:(stop-1)] = 0:(stop-start-1)
+    }
+
+# transitions into fix blocks
+dsmooth$fix_entries = 0 # default no transition = 0
+allevents = length(dsmooth$voleventbin)
+for (evnt in 2:allevents) {
+  ev2 = dsmooth$voleventbin[evnt]
+  ev1 = dsmooth$voleventbin[evnt-1]
+  
+  if (ev1 == "Block" & ev2 == "Fix") {
+      # note transition if event changes
+      dsmooth$fix_entries[evnt] = 1 # transition = 1
+  }
+}
+
+# before 1st transition, start with NAs
+dsmooth$fix_entries_dist = NA
+
+# compute distance from previous transition:
+translist = dsmooth$volnum[which(dsmooth$fix_entries == 1)]
+translist = c(translist, 720)  
+    for (i in 1:(length(translist)-1)) {
+      start = translist[i] # volume of transition
+      stop = translist[i+1] # volume of next transition
+      dsmooth$fix_entries_dist[dsmooth$volnum %in% start:(stop-1)] = 0:(stop-start-1)
+    }
+
+
 ```
 
 Use long data to track behavioral lapses & state transitions
@@ -79,7 +134,7 @@ dlong$errors = 0
 # track errors for each sub (including non-responses)
 for (sub in dsubs$subid) {
   # look at subject's data
-  dsmall = mydata[mydata$subid == sub,]
+  dsmall = dtask[dtask$subid == sub,]
   
   # pulsetime is starting time
   pulsetime <- dsmall$trial_startT[3]
@@ -97,7 +152,7 @@ dlong$errors_resp = 0
 # track errors for each sub (NOT including non-responses)
 for (sub in dsubs$subid) {
   # look at subject's data
-  dsmall = mydata[mydata$subid == sub,]
+  dsmall = dtask[dtask$subid == sub,]
   
   # pulsetime is starting time
   pulsetime <- dsmall$trial_startT[3]
@@ -116,7 +171,7 @@ dlong$long_rts = 0
 # track long RTs
 for (sub in dsubs$subid) {
   # look at subject's data
-  dsmall = mydata[mydata$subid == sub,]
+  dsmall = dtask[dtask$subid == sub,]
   
   # pulsetime is starting time
   pulsetime <- dsmall$trial_startT[3]
@@ -216,6 +271,40 @@ for (sub in dsubs$subid) {
   }
 }
 
+# track specific state changes
+dlong$state_transit = 0
+dlong$s1_entries = 0
+dlong$s2_entries = 0
+dlong$s3_entries = 0
+dlong$s4_entries = 0
+dlong$s5_entries = 0
+dlong$s6_entries = 0
+dlong$s7_entries = 0
+dlong$s8_entries = 0
+
+for (sub in dsubs$subid) {
+  # look at subject's data
+  dsmall = dlong[dlong$subid == sub,]
+
+  # track state changes
+  minvol = min(dsmall$volnums)+1
+  maxvol = 719
+
+  for (vol in (minvol+1):maxvol) {
+    s2 = dsmall$all_states_path2[dsmall$volnums==vol]
+    s1 = dsmall$all_states_path2[dsmall$volnums==vol-1]
+  
+    if (s1 != s2) {
+      # mark corresponding volumes in long dataset
+      dlong$state_transit[dlong$subid==sub & dlong$volnum==vol] = 1
+      # add to specific state transition column
+      state_col = paste0("s",s2,"_entries")
+      dlong[state_col][dlong$subid==sub & dlong$volnum==vol,] = 1
+      
+    }
+  }
+}
+
 ```
 
 Merge dsmooth event labels with dlong
@@ -227,6 +316,12 @@ dlong2 = merge(dlong,dsmooth_events,sort=FALSE)
 dlong2 = arrange(dlong2,subid)
 
 ```
+
+```{r}
+#this file contains the volume by volume events in long form...
+write.csv(dlong2,file = paste0("../Data/Brain_Data/CAP_k8_long_sequence_", Sys.Date(),".csv"),row.names=FALSE)
+```
+
 
 Create new wide data frame
 ```{r}
@@ -474,8 +569,5 @@ Write out files
 
 #this file contains the overall time-in-state, persistence, and precedent network measures for each person.
 write.csv(dwide,file = paste0("../Data/Brain_Data/CAP_measures_overall_", Sys.Date(),".csv"),row.names=FALSE)
-
-#this file contains the volume by volume events in long form...
-write.csv(dlong2,file = paste0("../Data/Brain_Data/CAP_k8_long_sequence_", Sys.Date(),".csv"),row.names=FALSE)
 
 ```
