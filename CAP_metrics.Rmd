@@ -5,7 +5,7 @@ date: "2/3/2021"
 output: html_document
 ---
 
-Script for computing CAP measures, and maybe merging brain and behavioral data?
+Script for computing CAP measures from sequences of brain states
 
 Questions:
 check dlong volume labels?
@@ -29,6 +29,7 @@ dsubs = read.csv("../Data/Brain_Data/vols_per_sub.csv",header=TRUE)
 
 # merged raw task data
 dtask <- read.csv("../Data/Brain_Data/nback_raw_merge_2024-03-29.csv",header=TRUE)
+dtask$subid = paste0("sub-", substr(dtask$participant, 5,7))
 
 # load packages
 library(dplyr)
