@@ -15,7 +15,14 @@ check pulse time
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-Load packages & data files 
+Load packages 
+```{r}
+# load packages
+library(dplyr)
+library(stringr)
+```
+
+Load data files 
 ```{r}
 #the following csv file was made by manually combining the volume event labels
 # with the CAP output files listing each person's k-means-labeled time series.
@@ -23,6 +30,7 @@ dsmooth <- read.csv("../Data/Brain_Data/CAP_k8_wide_smoothed_events_2024-03-20.c
 
 # make sure to fix dlong volume labels
 dlong <- read.csv("../Data/Brain_Data/CAP_k8_long_sequence_2024-03-20.csv",header=TRUE,stringsAsFactors = FALSE)
+dlong <- dlong[order(dlong$subid, dlong$volnums),]
 
 # subject list
 dsubs = read.csv("../Data/Brain_Data/vols_per_sub.csv",header=TRUE)
@@ -31,12 +39,29 @@ dsubs = read.csv("../Data/Brain_Data/vols_per_sub.csv",header=TRUE)
 dtask <- read.csv("../Data/Brain_Data/nback_raw_merge_2024-03-29.csv",header=TRUE)
 dtask$subid = paste0("sub-", substr(dtask$participant, 5,7))
 
-# load packages
-library(dplyr)
-library(stringr)
 ```
 
+Make function that converts list of 1s and 0s to list counting distance from 1s, e.g.:
+0  0  0  1 0 0 1 0 0 0 0 1
+NA NA NA 0 1 2 0 1 2 3 4 0
 
+```{r}
+
+# input is list of volumes where 1's occur
+# could be something like: df1$volnums[which(dsmall$errors == 1)]
+index_to_dist = function(vol_list) {
+  allcount = rep(NA, times=vol_list[1]-1)
+  vol_list = c(vol_list, 721) # needs to end at 720, add 1
+  for (i in 1:(length(vol_list)-1)) {
+    start = vol_list[i] # iterate over adjacent pairs in list
+    stop = vol_list[i+1]
+    count1 = 0:(stop-start-1)
+    allcount = c(allcount, count1)
+  }
+  return(allcount)
+}
+
+```
 Add some more event labels to 720-row file
 ```{r}
 # add times in seconds
@@ -45,8 +70,11 @@ dsmooth$voltimes_sec = dsmooth$voltimes/1000
 #Categorize events as fixation or block
 dsmooth$voleventbin = ifelse(dsmooth$voleventcat=="Fix", "Fix", "Block")
 
-# track task changes (switching between fixation and task blocks, bidirectionally):
+# track task changes (switching between fixation and task blocks, bidirectionally & unidirectionally):
 dsmooth$transitbinary = 0 # default no transition = 0
+dsmooth$task_entries = 0
+dsmooth$fix_entries = 0
+
 allevents = length(dsmooth$voleventbin)
 for (evnt in 2:allevents) {
   ev2 = dsmooth$voleventbin[evnt]
@@ -55,72 +83,34 @@ for (evnt in 2:allevents) {
   if (ev1 != ev2) {
       # note transition if event changes
       dsmooth$transitbinary[evnt] = 1 # transition = 1
-  }
-}
-
-# before 1st transition, start with NAs
-dsmooth$transit_dist = NA
-
-# compute distance from previous transition:
-translist = dsmooth$volnum[which(dsmooth$transitbinary == 1)]
-translist = c(translist, 720)  
-    for (i in 1:(length(translist)-1)) {
-      start = translist[i] # volume of transition
-      stop = translist[i+1] # volume of next transition
-      dsmooth$transit_dist[dsmooth$volnum %in% start:(stop-1)] = 0:(stop-start-1)
-    }
-
-# Also track unidirectional transitions:
-# transitions into task blocks
-dsmooth$task_entries = 0 # default no transition = 0
-allevents = length(dsmooth$voleventbin)
-for (evnt in 2:allevents) {
-  ev2 = dsmooth$voleventbin[evnt]
-  ev1 = dsmooth$voleventbin[evnt-1]
-  
-  if (ev1 == "Fix" & ev2 == "Block") {
+      
+      if (ev1 == "Fix" & ev2 == "Block") {
       # note transition if event changes
       dsmooth$task_entries[evnt] = 1 # transition = 1
-  }
-}
-
-# before 1st transition, start with NAs
-dsmooth$task_entries_dist = NA
-
-# compute distance from previous transition:
-translist = dsmooth$volnum[which(dsmooth$task_entries == 1)]
-translist = c(translist, 720)  
-    for (i in 1:(length(translist)-1)) {
-      start = translist[i] # volume of transition
-      stop = translist[i+1] # volume of next transition
-      dsmooth$task_entries_dist[dsmooth$volnum %in% start:(stop-1)] = 0:(stop-start-1)
-    }
-
-# transitions into fix blocks
-dsmooth$fix_entries = 0 # default no transition = 0
-allevents = length(dsmooth$voleventbin)
-for (evnt in 2:allevents) {
-  ev2 = dsmooth$voleventbin[evnt]
-  ev1 = dsmooth$voleventbin[evnt-1]
-  
-  if (ev1 == "Block" & ev2 == "Fix") {
+      }
+       if (ev1 == "Block" & ev2 == "Fix") {
       # note transition if event changes
       dsmooth$fix_entries[evnt] = 1 # transition = 1
+      }
   }
 }
 
+# convert to continuous measures
 # before 1st transition, start with NAs
+dsmooth$transit_dist = NA
+translist = dsmooth$volnum[which(dsmooth$transitbinary == 1)]
+dsmooth$transit_dist = index_to_dist(translist)
+
+# for task entries - remove 2's when sure that they match
+dsmooth$task_entries_dist = NA
+translist2 = dsmooth$volnum[which(dsmooth$task_entries == 1)]
+dsmooth$task_entries_dist = index_to_dist(translist2)
+
+# for fixation entries
 dsmooth$fix_entries_dist = NA
-
-# compute distance from previous transition:
-translist = dsmooth$volnum[which(dsmooth$fix_entries == 1)]
-translist = c(translist, 720)  
-    for (i in 1:(length(translist)-1)) {
-      start = translist[i] # volume of transition
-      stop = translist[i+1] # volume of next transition
-      dsmooth$fix_entries_dist[dsmooth$volnum %in% start:(stop-1)] = 0:(stop-start-1)
-    }
-
+translist3 = dsmooth$volnum[which(dsmooth$fix_entries == 1)]
+dsmooth$fix_entries_dist = index_to_dist(translist3)
+    
 
 ```
 
@@ -192,87 +182,41 @@ for (sub in dsubs$subid) {
 }
 
 # convert to continuous measures
-dlong$errors2 = NA # including missed responses
+#dlong$errors2 = NA # including missed responses
 
 for (sub in dsubs$subid) {
   # look at subject's data
   dsmall = dlong[dlong$subid == sub,]
+  vol1 = dsmall$volnums[1]
   errorlist = dsmall$volnums[which(dsmall$errors == 1)]
-  errorlist = c(errorlist, 720)
   
-  if (length(errorlist) > 1) {
-    for (i in 1:(length(errorlist)-1)) {
-      start = errorlist[i] 
-      stop = errorlist[i+1]
-      dlong$errors2[dlong$subid==sub & dlong$volnums %in% start:(stop-1)] = 0:(stop-start-1)
-    }
-  } else if (length(errorlist == 1)) {
+  if (length(errorlist) > 0) {
+    list720 = index_to_dist(errorlist)
+    dlong$errors2a[dlong$subid==sub] = list720[vol1:720]
+    
+  } else if (length(errorlist) == 0) {
       next
   }
 }
 
-# convert to continuous measures
-dlong$errors_resp2 = NA # NOT including missed responses
 
 for (sub in dsubs$subid) {
   # look at subject's data
   dsmall = dlong[dlong$subid == sub,]
-  errorlist = dsmall$volnums[which(dsmall$errors_resp == 1)]
-  errorlist = c(errorlist, 720)
-  
-  if (length(errorlist) > 1) {
-    for (i in 1:(length(errorlist)-1)) {
-      start = errorlist[i] 
-      stop = errorlist[i+1]
-      dlong$errors_resp2[dlong$subid==sub & dlong$volnums %in% start:(stop-1)] = 0:(stop-start-1)
-    }
-  } else if (length(errorlist == 1)) {
-      next
-  }
-}
-
-dlong$long_rts2 = NA
-
-for (sub in dsubs$subid) {
-  # look at subject's data
-  dsmall = dlong[dlong$subid == sub,]
+  vol1 = dsmall$volnums[1]
   errorlist = dsmall$volnums[which(dsmall$long_rts == 1)]
-  errorlist = c(errorlist, 720)
   
-  if (length(errorlist) > 1) {
-    for (i in 1:(length(errorlist)-1)) {
-      start = errorlist[i]
-      stop = errorlist[i+1]
-      dlong$long_rts2[dlong$subid==sub & dlong$volnums %in% start:(stop-1)] = 0:(stop-start-1)
-    }
-  } else if (length(errorlist == 1)) {
+  if (length(errorlist) > 0) {
+      list720 = index_to_dist(errorlist)
+      dlong$long_rts2[dlong$subid==sub] = list720[vol1:720]
+     
+  } else if (length(errorlist) == 0) {
       next
   } 
 }
 
 # track state changes
-dlong$state_transit = 0
 
-for (sub in dsubs$subid) {
-  # look at subject's data
-  dsmall = dlong[dlong$subid == sub,]
-
-  # track state changes
-  minvol = min(dsmall$volnums)+1
-  maxvol = 719
-
-  for (vol in (minvol+1):maxvol) {
-    s2 = dsmall$all_states_path2[dsmall$volnums==vol]
-    s1 = dsmall$all_states_path2[dsmall$volnums==vol-1]
-  
-    if (s1 != s2) {
-      # mark corresponding volumes in long dataset
-      dlong$state_transit[dlong$subid==sub & dlong$volnum==vol] = 1
-    }
-  }
-}
-
-# track specific state changes
 dlong$state_transit = 0
 dlong$s1_entries = 0
 dlong$s2_entries = 0
@@ -306,12 +250,50 @@ for (sub in dsubs$subid) {
   }
 }
 
+dlong$s1_entries_dist = NA
+dlong$s2_entries_dist = NA
+dlong$s3_entries_dist = NA
+dlong$s4_entries_dist = NA
+dlong$s5_entries_dist = NA
+dlong$s6_entries_dist = NA
+dlong$s7_entries_dist = NA
+dlong$s8_entries_dist = NA
+
+for (sub in dsubs$subid) {
+  # look at subject's data
+  dsmall = dlong[dlong$subid == sub,]
+  vol1 = dsmall$volnums[1]
+  trx1list = dsmall$volnums[which(dsmall$s1_entries == 1)]
+  trx2list = dsmall$volnums[which(dsmall$s2_entries == 1)]
+  trx3list = dsmall$volnums[which(dsmall$s3_entries == 1)]
+  trx4list = dsmall$volnums[which(dsmall$s4_entries == 1)]
+  trx5list = dsmall$volnums[which(dsmall$s5_entries == 1)]
+  trx6list = dsmall$volnums[which(dsmall$s6_entries == 1)]
+  trx7list = dsmall$volnums[which(dsmall$s7_entries == 1)]
+  trx8list = dsmall$volnums[which(dsmall$s8_entries == 1)]
+  
+  allLists = list(trx1list, trx2list, trx3list, trx4list, trx5list, trx6list, trx7list, trx8list)
+  
+  for (ls in 1:length(allLists)) {
+    thisL = allLists[[ls]]
+    state_col = paste0("s",ls,"_entries_dist")
+     
+    if (length(thisL) > 0) {
+      list720 = index_to_dist(thisL)
+      dlong[state_col][dlong$subid==sub,] = list720[vol1:720]
+  
+    } else if (length(thisL) == 0) {
+        next
+    }
+  }
+}
+
 ```
 
 Merge dsmooth event labels with dlong
 ```{r}
 dsmooth$volnums = dsmooth$volnum
-dsmooth_events = subset(dsmooth, select = c(voltimes, voleventname1, voleventcat, volblocknum, stimtype, wmload, transit_dist,volnums))
+dsmooth_events = subset(dsmooth, select = c(voltimes, voleventname1, voleventcat, volblocknum, stimtype, wmload, transit_dist,volnums, task_entries_dist, fix_entries_dist))
 
 dlong2 = merge(dlong,dsmooth_events,sort=FALSE)
 dlong2 = arrange(dlong2,subid)
