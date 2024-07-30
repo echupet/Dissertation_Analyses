@@ -10,6 +10,10 @@ Script for summarizing SCID diagnoses
 ```{r}
 library(dplyr)
 
+```
+
+
+```{r}
 scid = read.csv("../Data/SCID_Data/RRAY_SCIDScore_April+7,+2024_12.50_char_forR_cleaned.csv",stringsAsFactors = FALSE, header = TRUE)
 
 ```
@@ -20,33 +24,48 @@ scid = read.csv("../Data/SCID_Data/RRAY_SCIDScore_April+7,+2024_12.50_char_forR_
 head(names(scid))
 scid$participant = substr(scid$Subject.ID.,1,7)
 
-# Start with S1 diagnoses
-scid1 = scid[grep("S1",scid$Subject.ID),]
-
 # select diagnosis columns- columns containing the words "current"/"past" and not containing "symptoms"
 diag_cols = names(scid)[(grepl("CURRENT",names(scid)) | grepl("PAST",names(scid))) & !grepl("Symptoms",names(scid))]
 
-scid1 = subset(scid1, select=c("participant", diag_cols))
-dim(scid1) # 175
+# subset columns
+scid = subset(scid, select=c("participant", "Subject.ID.", diag_cols))
 
 # convert NAs to 1's (should indicate absence of diagnosis)
-scid1[is.na(scid1)] = 1
+scid[is.na(scid)] = 1
+
+# Separate by session (may need to redownload data)
+scid1 = scid[grep("S1",scid$Subject.ID),]
+scid2 = scid[grep("S2",scid$Subject.ID),]
+scid3 = scid[grep("D24",scid$Subject.ID),]
+
+dim(scid1); dim(scid2); dim(scid3)
+
 ```
 
 
 
 ```{r}
-# merge with n=157 dataset
+# merge with study dataset
 dwide = read.csv("../Data/Merged_Data/Merged_Data_Wide_2024-04-16.csv",stringsAsFactors = FALSE, header = TRUE)
 dim(dwide)
 names(dwide)
 
-# 2 more subjects to exclude
-dwide2 = dwide[dwide$participant!="RRAY001" & dwide$participant!="RRAY146",]
-dim(dwide2)
+exc1 = c("RRAY001", "RRAY146", "RRAY092", "RRAY016", "RRAY032")
+dwide2 = dwide[!(dwide$participant %in% exc1),]
+dim(dwide2) # 154
 
-allscid = merge(dwide2, scid1, all.x = TRUE)
-dim(allscid)
+```
+
+
+```{r}
+allscid1 = merge(dwide2, scid1, all.x = TRUE)
+dim(allscid1)
+
+allscid2 = merge(dwide2, scid2, all.x = TRUE)
+dim(allscid2)
+
+allscid3 = merge(dwide2, scid3, all.x = TRUE)
+dim(allscid3)
 ```
 
 Start with S1 Data
@@ -54,58 +73,146 @@ Start with S1 Data
 
 # function that finds current & past diagnoses and generates table of proportions
 # x is name of diagnosis as written in scid file, without the CURRENT./PAST. prefix
-scid_print = function(x) {
+scid_print = function(x, df) {
   cur = paste0("CURRENT.",x)
   past = paste0("PAST.",x)
-  print(prop.table(table(allscid[cur])))
-  print(sum(table(allscid[cur])))
-  print(prop.table(table(allscid[past])))
-  print(sum(table(allscid[past])))
+  print(prop.table(table(df[cur])))
+  print(sum(table(df[cur])))
+  print(prop.table(table(df[past])))
+  print(sum(table(df[past])))
 }
 
 # function that finds current & past diagnoses and generates table of number of subjects
 # x is name of diagnosis as written in scid file, without the CURRENT./PAST. prefix
-scid_print_num = function(x) {
+scid_print_num = function(x, df) {
   cur = paste0("CURRENT.",x)
   past = paste0("PAST.",x)
-  print(table(allscid[cur]))
-  print(sum(table(allscid[cur])))
-  print(table(allscid[past]))
-  print(sum(table(allscid[past])))
+  print(table(df[cur]))
+  print(sum(table(df[cur])))
+  print(table(df[past]))
+  print(sum(table(df[past])))
 }
 
 ```
 
 
 ```{r}
-# total should = 157 for each
+# total should = 154 for each
 
 # Mood disorders
-scid_print("Major.Depressive.Disorder")
-scid_print("Persistent.Depressive.Disorder")
-scid_print("Bipolar.Disorder.I")
-scid_print("Bipolar.Disorder.II")
-scid_print("Bipolar.NOS")
+scid_print("Major.Depressive.Disorder", allscid1)
+scid_print("Persistent.Depressive.Disorder", allscid1)
+scid_print("Bipolar.Disorder.I", allscid1)
+scid_print("Bipolar.Disorder.II", allscid1)
+scid_print("Bipolar.NOS", allscid1)
 
 # Anxiety disorders
-scid_print("Agoraphobia") 
-scid_print("Generalized.Anxiety.Disorder") 
-scid_print("Panic.Disorder") 
-scid_print("Social.Anxiety")
+scid_print("Agoraphobia", allscid1) 
+scid_print("Generalized.Anxiety.Disorder", allscid1) 
+scid_print("Panic.Disorder", allscid1) 
+scid_print("Social.Anxiety", allscid1)
 
 # Alcohol & Substance
-scid_print("Alcohol.Use.Disorder")
-scid_print("Alcohol.Severity")
-scid_print("Substance.Use.Disorder")
-scid_print("Substance.Severity")
+scid_print("Alcohol.Use.Disorder", allscid1)
+scid_print("Alcohol.Severity", allscid1)
+scid_print("Substance.Use.Disorder", allscid1)
+scid_print("Substance.Severity", allscid1)
 
 # eating disorders
-scid_print("Anorexia.Nervosa")
-scid_print("Bulimia.Nervosa")
-scid_print("Binge.Eating.Disorder")
+scid_print("Anorexia.Nervosa", allscid1)
+scid_print("Bulimia.Nervosa", allscid1)
+scid_print("Binge.Eating.Disorder", allscid1)
 
 # others
-scid_print("ADHD")
-scid_print("Obsessive.Compulsive.Disorder")
-scid_print("PTSD")
+scid_print("ADHD", allscid1)
+scid_print("Obsessive.Compulsive.Disorder", allscid1)
+scid_print("PTSD", allscid1)
+```
+Session 2 (1 year later)
+```{r}
+# total should = 126 for each
+
+# Mood disorders
+scid_print("Major.Depressive.Disorder", allscid2)
+scid_print("Persistent.Depressive.Disorder", allscid2)
+scid_print("Bipolar.Disorder.I", allscid2)
+scid_print("Bipolar.Disorder.II", allscid2)
+scid_print("Bipolar.NOS", allscid2)
+
+# Anxiety disorders
+scid_print("Agoraphobia", allscid2) 
+scid_print("Generalized.Anxiety.Disorder", allscid2) 
+scid_print("Panic.Disorder", allscid2) 
+scid_print("Social.Anxiety", allscid2)
+
+# Alcohol & Substance- check that these are combined correctly... don't double count people?
+scid_print("Alcohol.Use.Disorder", allscid2)
+scid_print("Alcohol.Severity", allscid2)
+scid_print("Substance.Use.Disorder", allscid2)
+scid_print("Substance.Severity", allscid2)
+
+# eating disorders
+scid_print("Anorexia.Nervosa", allscid2)
+scid_print("Bulimia.Nervosa", allscid2)
+scid_print("Binge.Eating.Disorder", allscid2)
+
+# others
+scid_print("ADHD", allscid2)
+scid_print("Obsessive.Compulsive.Disorder", allscid2)
+scid_print("PTSD", allscid2)
+```
+
+Session 3 (2 years later)
+```{r}
+# total should = 126 for each
+
+# Mood disorders
+scid_print("Major.Depressive.Disorder", allscid3)
+scid_print("Persistent.Depressive.Disorder", allscid3)
+scid_print("Bipolar.Disorder.I", allscid3)
+scid_print("Bipolar.Disorder.II", allscid3)
+scid_print("Bipolar.NOS", allscid3)
+
+# Anxiety disorders
+scid_print("Agoraphobia", allscid3) 
+scid_print("Generalized.Anxiety.Disorder", allscid3) 
+scid_print("Panic.Disorder", allscid3) 
+scid_print("Social.Anxiety", allscid3)
+
+# Alcohol & Substance- check that these are combined correctly... don't double count people?
+scid_print("Alcohol.Use.Disorder", allscid3)
+scid_print("Alcohol.Severity", allscid3)
+scid_print("Substance.Use.Disorder", allscid3)
+scid_print("Substance.Severity", allscid3)
+
+# eating disorders
+scid_print("Anorexia.Nervosa", allscid3)
+scid_print("Bulimia.Nervosa", allscid3)
+scid_print("Binge.Eating.Disorder", allscid3)
+
+# others
+scid_print("ADHD", allscid3)
+scid_print("Obsessive.Compulsive.Disorder", allscid3)
+scid_print("PTSD", allscid3)
+```
+```{r}
+# what I want to do now is get lifetime. Each person has maximum 3 rows- same columns. Combine across
+# columns for each subject... 1s are NA, 3's are full diagnosis
+
+# use aggregate function with sum....
+
+lifetime_count = function(x) {
+ # given a list of numbers, if there's a 3, return 1, otherwise 0
+  ifelse(3 %in% x, 1, 0)
+}
+
+
+try = aggregate(list(mdd = scid$PAST.Major.Depressive.Episode), by=list(pt = scid$participant), lifetime_count)
+
+try
+
+bwide = aggregate(list(movement1=blong2$V1[blong2$all_states_path2==1]),
+                                list(participant=blong2$subid[blong2$all_states_path2==1]),
+                                mean)
+
 ```
