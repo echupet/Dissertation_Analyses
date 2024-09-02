@@ -1,0 +1,82 @@
+---
+title: "Posthoc Tests"
+author: "Elena Peterson"
+date: "2024-03-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+FDR correction
+
+Read in files
+```{r}
+dlong <- read.csv("../../Data/Merged_Data/Merged_Data_9s_2024-04-09_cleaned.csv",header=TRUE,stringsAsFactors = FALSE)
+names(dlong)
+
+dwide = read.csv("../../Data/Merged_Data/Merged_Data_Wide_2024-07-08.csv",stringsAsFactors = FALSE, header = TRUE)
+names(dwide)
+
+```
+
+Get EF from long dataset
+```{r}
+dlong2 = subset(dlong, select=c("participant", "EF_FactorPos"))
+dlong3 = distinct(dlong2, participant, .keep_all = TRUE)
+
+dwide2 = merge(dwide, dlong3, all.x = T)
+names(dwide2)
+dim(dwide2)
+
+exc1 = c("RRAY001", "RRAY146", "RRAY092", "RRAY016", "RRAY032")
+dwide2 = dwide2[!(dwide2$participant %in% exc1),]
+dim(dwide2) # 154
+
+```
+
+
+```{r}
+# fill in list of p-values below- whatever is involved in mediation
+
+# first, direct path c'- does EF predict depression trajectories? (3 paths)
+# next, a paths - does EF predict brain measures? (1 brain state x 3 measures x 1 predictor = 3)
+# next, b paths - do brain measures predict depression trajectories? (1 brain state x 3 measures x 3 outcomes = 9)
+# total = 15 p-values
+
+# for last 3 p-values
+summary(lm(overall_ts_6 ~ EF_FactorPos + age + sex, data=dwide2)) # p = .675
+summary(lm(overall_ps_6 ~ EF_FactorPos + age + sex, data=dwide2)) # p = .150
+summary(lm(trx_61 ~ EF_FactorPos + age + sex, data=dwide2)) # p = .893
+
+
+```
+
+```{r}
+# 5/31/24 - age & sex on both outcomes
+mplus_ps = c(.445, .211, .409, # total path, not indirect
+             .349, .023, .470, # ts6 x 3 bdi
+             .355, .005, .303, # ps6 x 3 bdi
+             .372, .465, .349, # trx61 x 3 bdi
+             .383, .079, .444 ) # EF x 3 brain - from lm's above, divided by 2
+
+mplus_ps2 = mplus_ps*2 #one-tailed p-vals reported in mplus
+
+
+
+names(mplus_ps2) = c("EF_Phi", "EF_Var", "EF_Mean", # c paths
+                 "TS6_Phi", "TS6_Var", "TS6_Mean", # pseudo-b path (not controlling for x)
+                 "PS6_Phi", "PS6_Var", "PS6_Mean", # pseudo-b path (not controlling for x)
+                 "TX61_Phi", "TX61_Var", "TX61_Mean", # pseudo-b path (not controlling for x)
+                 "EF_TS6", "EF_PS6", "EF_TX61") # a paths
+
+# nothing survived correction...
+sort(round(p.adjust(mplus_ps2,"BH"),3))
+
+round(p.adjust(mplus_ps2,"fdr"),3)
+mplus_ps2
+
+```
+

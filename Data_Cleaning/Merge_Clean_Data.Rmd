@@ -1,0 +1,220 @@
+---
+title: "Merge Cleaned Data"
+author: "Elena Peterson"
+date: "2024-08-12"
+output: html_document
+---
+
+Script for merging data: CAP metrics, scanner task performance, out-of-scanner task performance, BDI scores, demographics.
+
+```{r}
+# Use BDI data from 4/9/24, which has been hand checked:
+longdata = read.csv("../../Data/Merged_Data/Merged_Data_9s_2024-04-09_cleaned.csv", stringsAsFactors = FALSE, header = TRUE)
+names(longdata)
+
+longdata$numeric_id = as.numeric(substr(longdata$participant,5,7))
+
+longdata2 = subset(longdata, select= c("participant", "numeric_id", "session", "bdi2_total", "EF_FactorPos", "age_estimate", "days_since_baseline"))
+```
+
+```{r}
+library(dplyr)
+
+sem = read.csv("../../Data/Merged_Data/mplus_bdi_params.csv", stringsAsFactors = FALSE,header=TRUE, na.strings = "*")
+
+dem = read.csv("../../Data/Cleaned_Survey_Data/RRAY_Baseline_Clean_09262023_Dates.csv",stringsAsFactors = FALSE,header=TRUE, na.strings = "9999")
+
+brains = read.csv("../../Data/Brain_Data/CAP_measures_overall_2024-07-08.csv", stringsAsFactors = FALSE, header = TRUE)
+
+mri_bx = read.csv("../../Data/Brain_Data/Task_Bx_2024-05-13.csv", stringsAsFactors = FALSE, header = TRUE)
+
+scid = read.csv("../../Data/SCID_Data/RRAY_SCIDScore_April+7,+2024_12.50_char_forR_cleaned.csv",stringsAsFactors = FALSE, header = TRUE)
+```
+
+```{r}
+#IDS are all different formats...
+# convert to match format in BDI dataset: e.g. RRAY001
+
+# brain data:
+#head(brains$subid)
+#brains$participant = gsub("sub-", "RRAY", brains$subid)
+#head(brains$participant)
+
+brains2 = subset(brains, select = c(overall_ps_1, overall_ps_2, overall_ps_3, overall_ps_4, overall_ps_5, overall_ps_6, overall_ps_7, overall_ps_8, overall_ts_1, overall_ts_2, overall_ts_3, overall_ts_4, overall_ts_5, overall_ts_6, overall_ts_7, overall_ts_8, trx_61, trx_16, ts_1_0back, ts_1_2back, ps_1_0back, ps_1_2back,
+ts_6_0back, ts_6_2back, ps_6_0back, ps_6_2back, ts_1267, ts_3458, trx61_0back, trx61_2back, all_ps, participant))
+
+# temp
+#brains2$ts6_2v0 = brains2$ts_6_2back - brains2$ts_6_0back
+#brains2$ts1_2v0 = brains2$ts_1_2back - brains2$ts_1_0back
+# demographic data:
+
+head(dem$participant)
+
+dem2 = subset(dem, select = c(age, sex, participant))
+              #, masq_loss_of_interest, rrs_brood, mfi_total, mfi_motivation))
+
+# mri bx data:
+head(mri_bx$participant)
+mri_bx$participant = substr(mri_bx$participant, 1, 7)
+
+mri_bx2 = subset(mri_bx, select = c(OverallAccuracy, Zeroback_Accuracy, Twoback_Accuracy, Zeroback_Misses, Zeroback_Lures, Zeroback_Nonlures,   Zeroback_Targets, participant))
+
+# mri bx data:
+head(sem$numeric_id)
+sem$participant = paste0("RRAY", sprintf("%003d", sem$numeric_id))
+
+sem2 = subset(sem, select = c(phi_mean, logv_mean, bdi_mean, participant))
+sem2 = distinct(sem2)
+
+head(scid$Subject.ID.)
+scid1 = scid[grep("S1",scid$Subject.ID),]
+dim(scid1)
+scid1$participant = substr(scid1$Subject.ID.,1,7)
+scid2 = subset(scid1, select = c(participant, RRAY.Group., PAST.Major.Depressive.Episode, PAST.Dysthymic.Episode.))
+
+scid_exclude = scid2[scid2$PAST.Major.Depressive.Episode!=3,]
+dim(scid_exclude)  # 131
+```
+
+```{r}
+
+dim(longdata2)
+
+dx_all = merge(longdata2, brains2, by="participant", all.x = TRUE)
+dim(dx_all)
+
+# add demographic data
+dx_all = merge(dx_all, dem2, by="participant", all.x = TRUE)
+dim(dx_all)
+
+# add behavioral mri data
+dx_all = merge(dx_all, mri_bx2, by="participant", all.x = TRUE)
+dim(dx_all) #1413
+
+names(dx_all)
+```
+
+```{r}
+# add stuff to merged dataset
+# need z-scores for 0-back persistence 6 mediation model
+dx_all$bdi_z = (dx_all$bdi2_total - mean(dx_all$bdi2_total,na.rm=T))/sd(dx_all$bdi2_total, na.rm=T)
+dx_all$Acc0_z = (dx_all$Zeroback_Accuracy - mean(dx_all$Zeroback_Accuracy,na.rm=T))/sd(dx_all$Zeroback_Accuracy, na.rm=T)
+dx_all$ps6_0b_z = (dx_all$ps_6_0back - mean(dx_all$ps_6_0back,na.rm=T))/sd(dx_all$ps_6_0back, na.rm=T)
+dx_all$age_z = (dx_all$age - mean(dx_all$age,na.rm=T))/sd(dx_all$age, na.rm=T)
+dx_all$sex_code = ifelse(dx_all$sex==1, -1, ifelse(dx_all$sex==2, 1, NA))
+
+```
+
+```{r}
+# specific participant exclusions
+
+ex_list = c("RRAY092", "RRAY016", "RRAY032") # severe substance use, or older than 19
+dx_exclude = dx_all[!(dx_all$participant %in% ex_list),]
+length(unique(dx_exclude$participant))
+
+```
+
+```{r}
+# split into older/younger, boys/girls
+
+median(dx_exclude$age) # 17
+
+dx_young = dx_exclude[dx_exclude$age < 17,]
+dx_old = dx_exclude[dx_exclude$age >= 17,]
+
+dx_girls = dx_exclude[dx_exclude$sex == 1,]
+dx_boys = dx_exclude[dx_exclude$sex == 2,]
+
+dx_young = arrange(dx_young, participant, session)
+dx_old = arrange(dx_old, participant, session)
+dx_girls = arrange(dx_girls, participant, session)
+dx_boys = arrange(dx_boys, participant, session)
+
+# remove id column for mplus
+dx_youngMP = dx_young[,-which(names(dx_young) == "participant")]
+dx_oldMP = dx_old[,-which(names(dx_old) == "participant")]
+dx_girlsMP = dx_girls[,-which(names(dx_girls) == "participant")]
+dx_boysMP = dx_boys[,-which(names(dx_boys) == "participant")]
+
+# change NAs to 999 for mplus
+dx_youngMP[is.na(dx_youngMP)] = -999
+dx_oldMP[is.na(dx_oldMP)] = -999
+dx_girlsMP[is.na(dx_girlsMP)] = -999
+dx_boysMP[is.na(dx_boysMP)] = -999
+
+write.csv(dx_youngMP, paste0("../../Data/Merged_Data/Merged_Data_young_", Sys.Date(), ".csv"), row.names = FALSE)
+write.csv(dx_oldMP, paste0("../../Data/Merged_Data/Merged_Data_old_", Sys.Date(), ".csv"), row.names = FALSE)
+write.csv(dx_girlsMP, paste0("../../Data/Merged_Data/Merged_Data_girls_", Sys.Date(), ".csv"), row.names = FALSE)
+write.csv(dx_boysMP, paste0("../../Data/Merged_Data/Merged_Data_boys_", Sys.Date(), ".csv"), row.names = FALSE)
+
+```
+
+```{r}
+# needs to be in session order by participant
+dx_all = arrange(dx_all, participant, session)
+
+# remove id column for mplus
+dx_mplus = dx_all[,-which(names(dx_all) == "participant")]
+
+# change NAs to 999 for mplus
+dx_mplus[is.na(dx_mplus)] = -999
+
+dx_exclude = arrange(dx_exclude, participant, session)
+
+# remove id column for mplus (should delete extra non-numeric columns)
+dx_mplus_ex = dx_exclude[,-which(names(dx_exclude) == "participant")]
+
+# change NAs to 999 for mplus
+dx_mplus_ex[is.na(dx_mplus_ex)] = -999
+
+
+```
+
+
+```{r}
+# outside of mplus, keep other variables...
+
+# add sem parameters
+dx_all = merge(dx_all, sem2, by="participant", all.x = TRUE)
+dim(dx_all)
+names(dx_all)
+
+```
+
+```{r}
+write.csv(dx_all, paste0("../../Data/Merged_Data/Merged_Data_9s_", Sys.Date(), ".csv"), row.names = FALSE)
+          
+write.csv(dx_mplus, paste0("../../Data/Merged_Data/Merged_Data_Mplus_9s_", Sys.Date(), ".csv"), row.names = FALSE)
+
+# with additional exclusions
+write.csv(dx_exclude, paste0("../../Data/Merged_Data/Merged_Data_9s_noPast_", Sys.Date(), ".csv"), row.names = FALSE)
+          
+write.csv(dx_mplus_ex, paste0("../../Data/Merged_Data/Merged_Data_Mplus_9s_noPast_", Sys.Date(), ".csv"), row.names = FALSE)        
+```
+
+Now merge wide format data only
+```{r}
+# start with brain data
+all_wide = merge(brains2, mri_bx2, by="participant", all.x = TRUE)
+dim(all_wide)
+
+# add demographic data
+all_wide = merge(all_wide, dem2, by="participant", all.x = TRUE)
+dim(all_wide)
+
+# add sem data
+all_wide = merge(all_wide, sem2, by="participant", all.x = TRUE)
+dim(all_wide)
+
+all_wide = merge(all_wide, scid2, by="participant", all.x = TRUE)
+dim(all_wide)
+
+wide_exclude = merge(scid_exclude, all_wide, all.x = TRUE) #only want intersection of names
+dim(wide_exclude) #
+```
+```{r}
+# write out wide merged file
+write.csv(all_wide, paste0("../../Data/Merged_Data/Merged_Data_Wide_", Sys.Date(), ".csv"), row.names = FALSE)
+  
+```
+
