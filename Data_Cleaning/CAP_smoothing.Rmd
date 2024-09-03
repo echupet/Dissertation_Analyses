@@ -15,11 +15,15 @@ Load packages & data files
 ```{r}
 library(zoo)
 library(ggplot2)
+```
 
-dlong = read.csv("../../Data/Brain_Data/CAP_k8_long_sequence.csv",header=TRUE)
+```{r}
+# long format CAP sequence from k-means output
+dlong = read.csv("../../Data/ScanTask_Data/CAP_k8_long_sequence.csv",header=TRUE)
 names(dlong)
 
-dsubs = read.csv("../../Data/Brain_Data/vols_per_sub.csv",header=TRUE)
+# dsubs contains number of fMRI volumes per subject 
+dsubs = read.csv("../../Data/ScanTask_Data/vols_per_sub.csv",header=TRUE)
 names(dsubs)
 ```
 
@@ -66,14 +70,11 @@ compute_roll3 = function(distcol) {
 
 Add rolling averages to long data:
 ```{r}
-dlong$d1_roll3 = compute_roll3("d1")
-dlong$d2_roll3 = compute_roll3("d2")
-dlong$d3_roll3 = compute_roll3("d3")
-dlong$d4_roll3 = compute_roll3("d4")
-dlong$d5_roll3 = compute_roll3("d5")
-dlong$d6_roll3 = compute_roll3("d6")
-dlong$d7_roll3 = compute_roll3("d7")
-dlong$d8_roll3 = compute_roll3("d8")
+
+for (bs in 1:8) {
+  print(paste("Adding smoothed sequence for State", bs))
+  dlong[[paste0("d", bs, "_roll3")]] = compute_roll3(paste0("d", bs))
+}
 
 ```
 
@@ -93,9 +94,12 @@ for (i in 1:length(all_rolls$d1_roll3)) {
 # add new assignments to long data
 dlong$all_states_path2 = xlist
 
-sum(dlong$all_states_path2 == dlong$idx_raw,na.rm=T) #98091
+# check how much stayed the same
+(unchanged = sum(dlong$all_states_path2 == dlong$idx_raw,na.rm=T))
 
-98091/113165 # preserves 87% of the sequence
+# compute percent unchanged of sequence
+unchanged/length(dlong$all_states_path2)
+
 
 ```
 
@@ -106,10 +110,9 @@ Visualize rolling average for each person
 d1sub = dlong[dlong$subid=="sub-001",]
 
 gr_sub <- ggplot(d1sub, aes(x=volnums)) + 
-  geom_line(aes(y=d4_roll3),color="blue") +
-  #xlab("Cylinders") + # x-axis label
-  #ylab("Horsepower") + # y-axis-label
-  #ggtitle("Title") + # Title of plot
+  geom_line(aes(y=d6_roll3),color="blue") + # change y to whatever state of interest
+  xlab("Volume Number") + 
+  ylab("K-Means Distance") +
   theme_classic() 
 
 gr_sub
@@ -120,7 +123,7 @@ Make data frame with length = number of volumes, for visualizing state sequences
 ```{r}
 
 # non-smoothed data:
-dwide_720 = data.frame("volnum"=1:720)
+dwide_720 = data.frame("volnums"=1:720)
 for (sub in dsubs$subid) {
     # get volumes belonging to sub:
     dsmall = dlong[dlong$subid==sub,c("d1","d2","d3","d4","d5","d6","d7","d8", "idx_raw")]
@@ -133,7 +136,7 @@ for (sub in dsubs$subid) {
 }
 
 # smoothed data:
-dwide_720_roll3 = data.frame("volnum"=1:720)
+dwide_720_roll3 = data.frame("volnums"=1:720)
 for (sub in dsubs$subid) {
     # get volumes belonging to sub:
     dsmall = dlong[dlong$subid==sub,c("d1_roll3","d2_roll3","d3_roll3","d4_roll3","d5_roll3","d6_roll3","d7_roll3","d8_roll3", "all_states_path2")]
@@ -163,12 +166,27 @@ palette1 = data.matrix(c(1:8))
 image(palette1,col=hcl.colors(8,"RdYlBu"))
 ```
 
+Add task event labels:
+```{r}
+# events file
+events <- read.csv("../../Data/ScanTask_Data/CAP_events_neut_2024-03-18.csv",header=TRUE,stringsAsFactors = FALSE)
+
+# add columns from dwide to events file:
+dwide = cbind(events, dwide_720_roll3)
+
+# need volnums from dwide to merge with dlong
+dwide_events = subset(dwide, select = c(voltimes, voleventname1, voleventcat, volblocknum, stimtype, wmload, volnums))
+
+dlong <- dlong[order(dlong$subid, dlong$volnums),]
+dlong2 = merge(dlong,dwide_events,sort=FALSE)
+dlong2 = arrange(dlong2,subid)
+```
+
 Write files:
 ```{r}
+write.csv(dlong2, file = paste0("../../Data/ScanTask_Data/CAP_long_smoothed_", Sys.Date(),".csv"),row.names=FALSE)
 
-write.csv(dlong, file = paste0("../../Data/Brain_Data/CAP_k8_long_smoothed_", Sys.Date(),".csv"),row.names=FALSE)
-
-write.csv(dwide_720_roll3, file = paste0("../../Data/Brain_Data/CAP_k8_wide_smoothed_", Sys.Date(),".csv"),row.names=FALSE)
+write.csv(dwide, file = paste0("../../Data/ScanTask_Data/CAP_wide_smoothed_", Sys.Date(),".csv"),row.names=FALSE)
 
 ```
 
