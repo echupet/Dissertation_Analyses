@@ -16,7 +16,7 @@ knitr::opts_chunk$set(echo = TRUE)
 Read in & merge all task files (*skip if this has already been done*):
 ```{r}
 # change as needed to location of behavioral files for scanner task:
-setwd("~/Desktop/Dissertation/Data/RRAY_scantask_data/")
+setwd("~/Desktop/Dynamic_EF/Data/RRAY_scantask_data/")
 
 alldata = list.files(recursive=T,pattern="*.csv")
 alldata
@@ -24,9 +24,8 @@ alldata = lapply(alldata, read.csv, header=TRUE) #finicky error... just try agai
 mydata = Reduce(function(...)merge(...,all=T),alldata)
 
 # add in fixed data (tasks where subjects switched keys)
-setwd("~/Desktop/Dissertation/Data/RRAY_scantask_data_fixed/")
+setwd("~/Desktop/Dynamic_EF/Data/RRAY_scantask_data_fixed/")
 
-#list.files(recursive=T,pattern="*.csv")
 alldata2 = list.files(recursive=T,pattern="*.csv")
 alldata2
 alldata2 = lapply(alldata2, read.csv, header=TRUE) #finicky error... just try again.
@@ -35,21 +34,14 @@ mydata2 = Reduce(function(...)merge(...,all=T),alldata2)
 # merge raw and fixed data:
 mydata3 = merge(mydata, mydata2, all=T)
 
+# reformat ID variable for compatibility with other files
+mydata3$subid = paste0("sub-", substr(mydata3$participant, 5,7))
+
 # save file
-write.csv(mydata3, file = paste0("~/Desktop/Dissertation/Data/Brain_Data/nback_raw_merge_", Sys.Date(),".csv"),row.names=FALSE)
+write.csv(mydata3, file = paste0("~/Desktop/Dynamic_EF/Data/ScanTask_Data/nback_raw_merge_", Sys.Date(),".csv"),row.names=FALSE)
 
 ```
 
-Read in data files:
-```{r}
-#use merged data file:
-mydata <- read.csv("../../Data/Brain_Data/nback_raw_merge_2024-08-12.csv",header=TRUE)
-
-#subject list:
-dsubs = read.csv("../../Data/Brain_Data/vols_per_sub.csv",header=TRUE)
-names(dsubs)
-
-```
 
 Next, create list of task events along with corresponding fmri volumes (*skip if this has already been done*):
 ```{r}
