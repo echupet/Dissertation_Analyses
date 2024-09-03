@@ -53,11 +53,17 @@ master$OverallAccuracy <- aggregate(list(OverallAccuracy=mydata_acc$key_resp_3.c
                                 list(participant=mydata_acc$participant),
                                 mean)$OverallAccuracy
 
-master$OverallNoAccuracy <- aggregate(list(OverallNoAccuracy=mydata_acc[mydata_acc$TargetType == "nonlure",]$key_resp_3.corr),list(participant=mydata_acc[mydata_acc$TargetType == "nonlure",]$participant),mean)$OverallNoAccuracy
+master$OverallNoAccuracy <- aggregate(list(OverallNoAccuracy=mydata_acc[mydata_acc$TargetType == "nonlure",]$key_resp_3.corr),
+                                      list(participant=mydata_acc[mydata_acc$TargetType == "nonlure",]$participant),
+                                      mean)$OverallNoAccuracy
 
-master$OverallYesAccuracy <- aggregate(list(OverallYesAccuracy=mydata_acc[mydata_acc$TargetType == "target",]$key_resp_3.corr),list(participant=mydata_acc[mydata_acc$TargetType == "target",]$participant), mean)$OverallYesAccuracy
+master$OverallYesAccuracy <- aggregate(list(OverallYesAccuracy=mydata_acc[mydata_acc$TargetType == "target",]$key_resp_3.corr),
+                                       list(participant=mydata_acc[mydata_acc$TargetType == "target",]$participant),
+                                       mean)$OverallYesAccuracy
 
-master$OverallLureAccuracy <- aggregate(list(OverallLureAccuracy=mydata_acc[mydata_acc$TargetType == "lure",]$key_resp_3.corr),list(participant=mydata_acc[mydata_acc$TargetType == "lure",]$participant), mean)$OverallLureAccuracy
+master$OverallLureAccuracy <- aggregate(list(OverallLureAccuracy=mydata_acc[mydata_acc$TargetType == "lure",]$key_resp_3.corr),
+                                        list(participant=mydata_acc[mydata_acc$TargetType == "lure",]$participant),
+                                        mean)$OverallLureAccuracy
 
 master$Zeroback_Accuracy <- aggregate(list(Zeroback_Accuracy=mydata_acc[mydata_acc$BlockType == "0-Back",]$key_resp_3.corr),
                                 list(participant=mydata_acc[mydata_acc$BlockType == "0-Back",]$participant),
@@ -138,11 +144,13 @@ for (b in nblocks) {
 
 Add more specific accuracy measures, starting with 0-back condition:
 ```{r}
-master$Zeroback_Misses <- aggregate(
-  list(Zeroback_Misses=mydata_acc[mydata_acc$BlockType == "0-Back",]$key_resp_3.keys), list(participant=mydata_acc[mydata_acc$BlockType == "0-Back",]$participant), missing)$Zeroback_Misses
+master$Zeroback_Misses <- aggregate(list(Zeroback_Misses=mydata_acc[mydata_acc$BlockType == "0-Back",]$key_resp_3.keys), 
+                                    list(participant=mydata_acc[mydata_acc$BlockType == "0-Back",]$participant), 
+                                    missing)$Zeroback_Misses
 
-master$Zeroback_Lures <- aggregate(
-  list(Zeroback_Lures=mydata_acc[mydata_acc$BlockType == "0-Back" & mydata_acc$TargetType=="lure",]$key_resp_3.corr), list(participant=mydata_acc[mydata_acc$BlockType == "0-Back"& mydata_acc$TargetType=="lure",]$participant), mean)$Zeroback_Lures
+master$Zeroback_Lures <- aggregate(list(Zeroback_Lures=mydata_acc[mydata_acc$BlockType == "0-Back" &mydata_acc$TargetType=="lure",]$key_resp_3.corr),
+                                   list(participant=mydata_acc[mydata_acc$BlockType == "0-Back"& mydata_acc$TargetType=="lure",]$participant), 
+                                   mean)$Zeroback_Lures
 
 master$Zeroback_Lures <- aggregate(
   list(Zeroback_Lures=mydata_acc[mydata_acc$BlockType == "0-Back" & mydata_acc$TargetType=="lure",]$key_resp_3.corr), list(participant=mydata_acc[mydata_acc$BlockType == "0-Back"& mydata_acc$TargetType=="lure",]$participant), mean)$Zeroback_Lures
