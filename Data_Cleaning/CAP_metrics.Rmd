@@ -22,25 +22,17 @@ Load data files
 ```{r}
 # PathToData = ../../Data/ScanTask_Data/
 
-# events file
-events <- read.csv("../../Data/ScanTask_Data/CAP_events_neut_2024-03-18.csv",header=TRUE,stringsAsFactors = FALSE)
-
 # smoothed CAP sequences, wide format
-smooth <- read.csv("../../Data/ScanTask_Data/CAP_k8_wide_smoothed_2024-03-20.csv",header=TRUE,stringsAsFactors = FALSE)
+dsmooth <- read.csv("../../Data/ScanTask_Data/CAP_long_smoothed_2024-09-03.csv",header=TRUE,stringsAsFactors = FALSE)
 
-# add columns from smooth to events file:
-dsmooth = cbind(events, smooth)
+# smoothed CAP sequences, long format
+dlong <- read.csv("../../Data/ScanTask_Data/CAP_long_smoothed_2024-09-03.csv",header=TRUE,stringsAsFactors = FALSE)
 
-# smoothed CAP sequences, long format (make sure to fix dlong volume labels)
-dlong <- read.csv("../../Data/ScanTask_Data/CAP_k8_long_smoothed_2024-08-12.csv",header=TRUE,stringsAsFactors = FALSE)
-dlong <- dlong[order(dlong$subid, dlong$volnums),]
-
-# subject list
+# dsubs contains number of fMRI volumes per subject 
 dsubs = read.csv("../../Data/ScanTask_Data/vols_per_sub.csv",header=TRUE)
 
-# merged raw task data
-dtask <- read.csv("../../Data/ScanTask_Data/nback_raw_merge_2024-03-29.csv",header=TRUE)
-dtask$subid = paste0("sub-", substr(dtask$participant, 5,7))
+# behavioral task data, contains trial-by-trial error & RT data
+dtask <- read.csv("../../Data/ScanTask_Data/nback_raw_merge_2024-09-03.csv",header=TRUE)
 
 ```
 
@@ -89,8 +81,8 @@ index_to_dist_inv = function(vol_list) {
 
 Use long data to track behavioral lapses & state transitions
 ```{r}
-names(dlong)
-dim(dlong)
+# make sure dlong rows in correct order:
+dlong <- dlong[order(dlong$subid, dlong$volnums),]
 
 # intialize error & long RT variables
 dlong$errors = 0
