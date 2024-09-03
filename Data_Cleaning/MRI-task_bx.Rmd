@@ -13,10 +13,10 @@ knitr::opts_chunk$set(echo = TRUE)
 
 Load packages & data files 
 ```{r}
-mydata <- read.csv("../../Data/Brain_Data/nback_raw_merge_2024-08-12.csv",header=TRUE)
+mydata <- read.csv("../../Data/ScanTask_Data/nback_raw_merge_2024-09-03.csv",header=TRUE)
 
 # subject list
-dsubs = read.csv("../../Data/Brain_Data/vols_per_sub.csv",header=TRUE)
+dsubs = read.csv("../../Data/ScanTask_Data/vols_per_sub.csv",header=TRUE)
 names(dsubs)
 
 # load packages
@@ -44,34 +44,58 @@ mydata_acc_NoMiss <- mydata_acc[-which(mydata_acc$key_resp_3.keys=="None"),]
 
 Get overall accuracy measures
 ```{r}
-#note: aggregate reorders IDs. So to keep it the same, first get unique IDs, then sort.
 
 master <- data.frame("participant" = sort(unique(mydata$participant)))
 
+# Calculate Overall Accuracy
+master <- mydata_acc %>%
+  group_by(participant) %>%
+  summarise(OverallAccuracy = mean(key_resp_3.corr)) %>%
+  right_join(master, by = "participant")
 
-master$OverallAccuracy <- aggregate(list(OverallAccuracy=mydata_acc$key_resp_3.corr),
-                                list(participant=mydata_acc$participant),
-                                mean)$OverallAccuracy
+# Calculate Overall No Accuracy
+master <- mydata_acc %>%
+  filter(TargetType == "nonlure") %>%
+  group_by(participant) %>%
+  summarise(OverallNoAccuracy = mean(key_resp_3.corr)) %>%
+  right_join(master, by = "participant")
 
-master$OverallNoAccuracy <- aggregate(list(OverallNoAccuracy=mydata_acc[mydata_acc$TargetType == "nonlure",]$key_resp_3.corr),list(participant=mydata_acc[mydata_acc$TargetType == "nonlure",]$participant),mean)$OverallNoAccuracy
+# Calculate Overall Yes Accuracy
+master <- mydata_acc %>%
+  filter(TargetType == "target") %>%
+  group_by(participant) %>%
+  summarise(OverallYesAccuracy = mean(key_resp_3.corr)) %>%
+  right_join(master, by = "participant")
 
-master$OverallYesAccuracy <- aggregate(list(OverallYesAccuracy=mydata_acc[mydata_acc$TargetType == "target",]$key_resp_3.corr),list(participant=mydata_acc[mydata_acc$TargetType == "target",]$participant), mean)$OverallYesAccuracy
+# Calculate Overall Lure Accuracy
+master <- mydata_acc %>%
+  filter(TargetType == "lure") %>%
+  group_by(participant) %>%
+  summarise(OverallLureAccuracy = mean(key_resp_3.corr)) %>%
+  right_join(master, by = "participant")
 
-master$OverallLureAccuracy <- aggregate(list(OverallLureAccuracy=mydata_acc[mydata_acc$TargetType == "lure",]$key_resp_3.corr),list(participant=mydata_acc[mydata_acc$TargetType == "lure",]$participant), mean)$OverallLureAccuracy
+# Calculate Overall Zero-back Accuracy
+master <- mydata_acc %>%
+  filter(BlockType == "0-Back") %>%
+  group_by(participant) %>%
+  summarise(ZeroBack_Accuracy = mean(key_resp_3.corr)) %>%
+  right_join(master, by = "participant")
 
-master$Zeroback_Accuracy <- aggregate(list(Zeroback_Accuracy=mydata_acc[mydata_acc$BlockType == "0-Back",]$key_resp_3.corr),
-                                list(participant=mydata_acc[mydata_acc$BlockType == "0-Back",]$participant),
-                                mean)$Zeroback_Accuracy
+# Calculate Overall Two-back Accuracy
+master <- mydata_acc %>%
+  filter(BlockType == "2-Back") %>%
+  group_by(participant) %>%
+  summarise(TwoBack_Accuracy = mean(key_resp_3.corr)) %>%
+  right_join(master, by = "participant")
 
-master$Twoback_Accuracy <- aggregate(list(Twoback_Accuracy=mydata_acc[mydata_acc$BlockType == "2-Back",]$key_resp_3.corr),
-                                list(participant=mydata_acc[mydata_acc$BlockType == "2-Back",]$participant),
-                                mean)$Twoback_Accuracy
+```
 
+```{r}
 # check who has low accuracy scores
-master$Participant[which(master$OverallAccuracy<.6)]
+master$participant[which(master$OverallAccuracy<.6)]
 
 # check values of low accuracy
-#master$OverallAccuracy[which(master$OverallAccuracy<.6)] 
+master$OverallAccuracy[which(master$OverallAccuracy<.6)] 
 
 ```
 
@@ -81,18 +105,27 @@ Get overall RT measures
 #note: aggregate reorders IDs. So to keep it the same, first trim IDs to be consistent,
 # then sort.
 
-master$OverallRT <- aggregate(list(OverallRT=mydata_acc$key_resp_3.rt),
-                                list(participant=mydata_acc$participant),
-                                mean,na.rm=T)$OverallRT
+# Calculate Overall RT
+master <- mydata_acc %>%
+  group_by(participant) %>%
+  summarise(OverallRT = mean(key_resp_3.rt, na.rm=T)) %>%
+  right_join(master, by = "participant")
 
-master$Zeroback_RT <- aggregate(list(ZerobackRT=mydata_acc[mydata_acc$BlockType == "0-Back",]$key_resp_3.rt),
-                                list(participant=mydata_acc[mydata_acc$BlockType == "0-Back",]$participant),
-                                mean,na.rm=T)$ZerobackRT
+# Calculate Zero-back RT
+master <- mydata_acc %>%
+  filter(BlockType == "0-Back") %>%
+  group_by(participant) %>%
+  summarise(Zeroback_RT = mean(key_resp_3.rt, na.rm=T)) %>%
+  right_join(master, by = "participant")
 
-master$Twoback_RT <- aggregate(list(TwobackRT=mydata_acc[mydata_acc$BlockType == "2-Back",]$key_resp_3.rt),
-                                list(participant=mydata_acc[mydata_acc$BlockType == "2-Back",]$participant),
-                                mean,na.rm=T)$TwobackRT
+# Calculate Two-back RT
+master <- mydata_acc %>%
+  filter(BlockType == "2-Back") %>%
+  group_by(participant) %>%
+  summarise(Twoback_RT = mean(key_resp_3.rt, na.rm=T)) %>%
+  right_join(master, by = "participant")
 
+# convert to ms & log transform
 master$Overall_logRT = log(master$OverallRT*1000)
 master$Zeroback_logRT = log(master$Zeroback_RT*1000)
 master$Twoback_logRT = log(master$Twoback_RT*1000)
@@ -112,10 +145,10 @@ missing <- function(y) {
 which_acc <- function(condition) {
   
   Acc <- aggregate(list(BlockAccuracy=mydata_acc[condition,]$key_resp_3.corr),
-  list(participant=mydata_acc[condition,]$participant),mean)
+                   list(participant=mydata_acc[condition,]$participant),mean)
   
   Miss <- aggregate(list(Misses=mydata_acc[condition,]$key_resp_3.keys),
-  list(participant=mydata_acc[condition,]$participant),missing)
+                    list(participant=mydata_acc[condition,]$participant),missing)
 
   merge(Acc,Miss,all=T)
 }
@@ -138,24 +171,42 @@ for (b in nblocks) {
 
 Add more specific accuracy measures, starting with 0-back condition:
 ```{r}
-master$Zeroback_Misses <- aggregate(
-  list(Zeroback_Misses=mydata_acc[mydata_acc$BlockType == "0-Back",]$key_resp_3.keys), list(participant=mydata_acc[mydata_acc$BlockType == "0-Back",]$participant), missing)$Zeroback_Misses
+# Count Zero-back Misses
+master <- mydata_acc %>%
+  filter(BlockType == "0-Back") %>%
+  group_by(participant) %>%
+  summarise(Zeroback_Misses = missing(key_resp_3.keys)) %>%
+  right_join(master, by = "participant")
 
-master$Zeroback_Lures <- aggregate(
-  list(Zeroback_Lures=mydata_acc[mydata_acc$BlockType == "0-Back" & mydata_acc$TargetType=="lure",]$key_resp_3.corr), list(participant=mydata_acc[mydata_acc$BlockType == "0-Back"& mydata_acc$TargetType=="lure",]$participant), mean)$Zeroback_Lures
+# Zero-back Lure Accuracy
+master <- mydata_acc %>%
+  filter(BlockType == "0-Back") %>%
+  filter(TargetType == "lure") %>%
+  group_by(participant) %>%
+  summarise(Zeroback_Lures = mean(key_resp_3.corr)) %>%
+  right_join(master, by = "participant")
 
-master$Zeroback_Lures <- aggregate(
-  list(Zeroback_Lures=mydata_acc[mydata_acc$BlockType == "0-Back" & mydata_acc$TargetType=="lure",]$key_resp_3.corr), list(participant=mydata_acc[mydata_acc$BlockType == "0-Back"& mydata_acc$TargetType=="lure",]$participant), mean)$Zeroback_Lures
+# Zero-back Non-Lure Accuracy
+master <- mydata_acc %>%
+  filter(BlockType == "0-Back") %>%
+  filter(TargetType == "nonlure") %>%
+  group_by(participant) %>%
+  summarise(Zeroback_Nonlures = mean(key_resp_3.corr)) %>%
+  right_join(master, by = "participant")
 
-master$Zeroback_Nonlures <- aggregate(
-  list(Zeroback_Nonlures=mydata_acc[mydata_acc$BlockType == "0-Back" & mydata_acc$TargetType=="nonlure",]$key_resp_3.corr), list(participant=mydata_acc[mydata_acc$BlockType == "0-Back"& mydata_acc$TargetType=="nonlure",]$participant), mean)$Zeroback_Nonlures
+# Zero-back Target Accuracy
+master <- mydata_acc %>%
+  filter(BlockType == "0-Back") %>%
+  filter(TargetType == "target") %>%
+  group_by(participant) %>%
+  summarise(Zeroback_Targets = mean(key_resp_3.corr)) %>%
+  right_join(master, by = "participant")
 
-master$Zeroback_Targets <- aggregate(
-  list(Zeroback_Targets=mydata_acc[mydata_acc$BlockType == "0-Back" & mydata_acc$TargetType=="target",]$key_resp_3.corr), list(participant=mydata_acc[mydata_acc$BlockType == "0-Back"& mydata_acc$TargetType=="target",]$participant), mean)$Zeroback_Targets
+
 ```
 
 Save behavioral measures (acc & RT)
 ```{r}
-write.csv(master, paste0("../../Data/Brain_Data/Task_Bx_",Sys.Date(),".csv"),row.names = FALSE)
+write.csv(master, paste0("../../Data/ScanTask_Data/Task_Bx_",Sys.Date(),".csv"),row.names = FALSE)
 ```
 
