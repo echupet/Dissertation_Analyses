@@ -11,28 +11,20 @@
 CAP scripts:\ulnone \
 \
 
-\f0\b \cf2 CAP_smoothing: 
+\f0\b \cf2 01 CAP_smoothing: 
 \f1\b0 Script for smoothing k-means distance metrics, relabelling states based on smoothed sequences, and saving brain state sequences in long (CAP_k8_long_smooth_[date].csv) and wide formats (CAP_k8_wide_smoothed_[date].csv).\
 \
 
-\f0\b CAP_task_events:
+\f0\b 02 CAP_task_events:
 \f1\b0  Script for merging fmri task files (nback_raw_merge_[date].csv) and generating volume-by-volume list of task events (CAP_events_neut_[date].csv).\
 \
 
-\f0\b MRI-task_bx: 
+\f0\b 03 MRI-task_bx: 
 \f1\b0 Script for extracting behavioral measures from fmri task.\
 \
 
-\f0\b CAP_metrics:
+\f0\b 04 CAP_metrics:
 \f1\b0  Script for computing CAP metrics (TS, PS, transitions).\
-\
-
-\f0\b RRAY_BDI_Data:
-\f1\b0  Script for aggregating longitudinal BDI measures. A little messy but good enough\'85\
-\
-
-\f0\b Merge_Clean_Data: 
-\f1\b0 Script for merging data: CAP metrics, scanner task performance, out-of-scanner task performance, BDI scores, demographics.\
 \
 \cf0 \
 }
