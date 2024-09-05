@@ -5,18 +5,21 @@
 
 % dependencies: getGammaSimilarity_EP & munkres
 
+% input files: one text file per person, 
+% where rows = fMRI volumes & columns = regions of interest
+
 %% 1. Update these parameters
 
 tic
 
 % name to distinguish this run
-tag = 'k511_STD_sample_10r_';
+tag = 'k511_test1_';
 
-% Path to cap matlab files
-cd '/Users/elenapeterson/Desktop/CAP_Tools/CAP_mods_2024/';
+% Path to KMeans folder
+cd '/Users/elenapeterson/Desktop/Dynamic_EF/Scripts/KMeans/';
 
 % Path to txt data files
-datapath = '/Users/elenapeterson/Desktop/CAP_Tools/CAP_mods/SmallData/';
+datapath = '/Users/elenapeterson/Desktop/Dynamic_EF/Data/CAP_test_data/';
 
 % This specifies the range of values over which to perform k means
 K_range = 5:11;
@@ -25,7 +28,7 @@ K_range = 5:11;
 % sim
 reps = 10;
 
-drop_size = .1; % sample size to drop each iteration
+drop_size = .1; % sample size to drop each iteration as a fraction
 
 
 %% 2. Loading the data files
@@ -34,7 +37,7 @@ files = dir([datapath '*.txt']);
 files = {files.name};
 Xon = {};
 
-% Data: cell array, each cell of size n_TP x n_masked_voxels
+% Data: cell array, each cell of size timepoints x regions
 for i = 1:length(files)
     f = load([datapath, files{i}]); % vols x rois
     fnorm = normalize(f); % IMPORTANT - normalize data by columns (rois)
@@ -44,11 +47,6 @@ end
 
 
 %% 2. Prep for K means
-
-% for testing:
-%X = randn(18,4); % total vols by ROIs
-%n_subs = 3;
-%k=3;
 
 DistType = 'sqeuclidean';
 
@@ -103,9 +101,9 @@ toc
             if rep == 1
                 all_IDX(:,n_k) = IDX;
             end   
+            
             % split IDX into multiple columns, each represents one cluster,
             % ones when that state is present, zeros when absent.
-            % alternative is to use distance metrics...
             IDX_bin = zeros(IDX_length, k);
             
             % NaNs (dropped volumes) will become zero
@@ -119,18 +117,16 @@ toc
         end
         
         % initialize similarity vector
-        %n_combos = reps*(reps-1)/2 %unique combos of reps
         k_sim = []; %unique combos of reps
 
         for run1 = 1:reps-1
             for run2 = run1+1:reps
-                %k_sim(i,j) = getGammaSimilarity_EP(k_IDX{i}, k_IDX{j});
                 sim = getGammaSimilarity_EP(k_IDX_bin(:,:,run1), k_IDX_bin(:,:,run2));
                 k_sim = [k_sim sim];
             end
         end
         
-        % get average of nonzero elements (might be safer to select upper?)
+        % get average of nonzero elements
         k_sim_av = mean(k_sim);
         k_sim_sd = std(k_sim);
         
