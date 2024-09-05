@@ -5,12 +5,12 @@
 tic
 
 % Path to cap matlab scripts
-cd '/Users/elenapeterson/Desktop/CAP_Tools/CAP_mods/SmallData/';
+cd '/Users/elenapeterson/Desktop/Dynamic_EF/Scripts/KMeans/';
 
 % Path to txt data files
-datapath = '/Users/elenapeterson/Desktop/CAP_Tools/CAP_mods/SmallData/';
+datapath = '/Users/elenapeterson/Desktop/Dynamic_EF/Data/CAP_test_data/';
 
-% This is the k which has been previously selected as optimal number of
+% This is whatever k which has been previously selected as optimal number of
 % clusters
 k = 6;
 
