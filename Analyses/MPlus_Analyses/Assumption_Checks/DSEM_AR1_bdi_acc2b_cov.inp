@@ -1,4 +1,4 @@
-TITLE:	DSEM AR1 Model : Symptom Trajectory Features on EF
+TITLE:	DSEM AR1 Model : BDI variability on 2-back Accuracy, with covariates
 
 DATA:	FILE IS ~/Desktop/Dynamic_EF/Data/Merged_Data/Mplus_data_n154.csv;
 
@@ -9,12 +9,12 @@ VARIABLE:	NAMES ARE subid session BDI EF days_from_baseline
 		
 	MISSING ARE ALL (-999);
 	
-	USEVARIABLES ARE subid BDI EF;
+	USEVARIABLES ARE subid BDI Acc_2b age sex;
 
 	LAGGED = BDI(1); !Created a Lag-1 variable for BDI;
-	CLUSTER = subid; !The Between-Level ID variable is subid;
-	BETWEEN = EF; ! accuracy & brain measures are between;
-	Define: CENTER EF (GRANDMEAN);
+	CLUSTER = subid; !The Between-Level ID variable is SUB;
+	BETWEEN = Acc_2b age sex; ! accuracy & brain measures are between;
+	Define: CENTER Acc_2b age (GRANDMEAN);
 
 ANALYSIS:
 TYPE = TWOLEVEL RANDOM; !Two-Level Model with paths that are latent variables;
@@ -35,8 +35,6 @@ BDI; !intercept variance, tau_00;
 phi; !autoregressive slope variance, tau_11;
 logv; !between-person variance of sigmaˆ2_i not explained by BRAIN;
 
-BDI ON EF; 
-phi ON EF;
-logv ON EF;
+logv ON Acc_2b age sex; !Accuracy predicting person-specific residual variance;
 
 OUTPUT: STDYX;

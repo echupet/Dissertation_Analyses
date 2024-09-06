@@ -1,0 +1,53 @@
+TITLE:	DSEM AR1 Model : 0-back Acc -> State 6 Persistence -> BDI variability
+
+DATA:	FILE IS ~/Desktop/Dynamic_EF/Data/Merged_Data/Mplus_data_n154.csv;
+
+VARIABLE:	NAMES ARE subid session BDI EF days_from_baseline 
+	ps1 ps6 ts1 ts6 trx61 
+	ts1_0b ts1_2b ps1_0b ps1_2b ts6_0b ts6_2b	 ps6_0b ps6_2b
+	trx61_0b trx61_2b
+	age sex Acc Acc_0b Acc_2b;
+		
+	MISSING ARE ALL (-999);
+	
+	USEVARIABLES ARE subid BDI Acc_0b ps6_0b age sex;
+
+	LAGGED = BDI(1); !Created a Lag-1 variable for BDI;
+	CLUSTER = subid; !The Between-Level ID variable is SUB;
+	BETWEEN = Acc_0b ps6_0b age sex; ! accuracy & brain measures are between;
+	Define: CENTER Acc_0b ps6_0b age (GRANDMEAN);
+
+ANALYSIS:
+TYPE = TWOLEVEL RANDOM; !Two-Level Model with paths that are latent variables;
+ESTIMATOR = BAYES; !Lagged variables can only be estimated with Bayes in Mplus; 
+BITERATIONS = (1000); !Run at least 1000 iteration of the MCMC algorithm;
+
+MODEL:
+%WITHIN%
+phi | BDI ON BDI&1; !BDI is regressed on Lag-1 BDI, the slope is latent;
+logv | BDI; !the Within-Level residual variance is latent, sigmaˆ2_i; 
+
+%BETWEEN%
+[BDI]; !mean intercept, gamma_00;
+[phi]; !mean of autoregressive slope, gamma_10;
+[logv]; !log of the mean of the residual variance, omega_0;
+
+BDI; !intercept variance, tau_00;
+phi; !autoregressive slope variance, tau_11;
+logv (vary); !between-person variance of sigmaˆ2_i not explained by BRAIN;
+
+Acc_0b (varx);
+
+! acc predicts brain
+ps6_0b on Acc_0b (a)
+age sex;
+
+! acc and brain predict future depression
+logv ON ps6_0b (b)
+Acc_0b age sex;
+
+MODEL CONSTRAINT:
+NEW(indir1); ! indirect paths: Acc -> brain -> symptoms
+indir1 = b*a*sqrt(varx/vary); !standardized indirect path
+
+OUTPUT: STDYX;

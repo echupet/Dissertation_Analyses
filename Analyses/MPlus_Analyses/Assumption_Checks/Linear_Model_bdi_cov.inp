@@ -1,0 +1,38 @@
+TITLE:	Model testing for linear trend in BDI scores.
+
+DATA:	FILE IS ~/Desktop/Dynamic_EF/Data/Merged_Data/Mplus_data_n154.csv;
+
+VARIABLE:	NAMES ARE subid session BDI EF days_from_baseline 
+	ps1 ps6 ts1 ts6 trx61 
+	ts1_0b ts1_2b ps1_0b ps1_2b ts6_0b ts6_2b	 ps6_0b ps6_2b
+	age sex Acc Acc_0b Acc_2b;
+		
+	MISSING ARE ALL (-999);
+	
+	USEVARIABLES ARE subid BDI days_from_baseline age sex;
+
+	WITHIN = days_from_baseline;! time is only used in the Within-Level model;
+	CLUSTER = subid;
+	BETWEEN = age sex;
+	Define: CENTER age (GRANDMEAN);
+
+ANALYSIS:
+TYPE = TWOLEVEL RANDOM;!Two-Level Model with paths that are latent variables;
+ESTIMATOR = BAYES;!For consistency with other DSEM models
+BITERATIONS = (1000);!Run at least 1000 iteration of the MCMC algorithm;
+
+MODEL:
+%WITHIN%
+trend | BDI ON days_from_baseline;! BDI is regressed on time to capture the trend over time, the slope is latent;
+
+%BETWEEN%
+[BDI]; !mean intercept, gamma_00;
+[trend]; !mean of the linear trend slope, gamma_30;
+
+BDI; !intercept variance, tau_00;
+trend; !linear trend slope variance, tau_33;
+
+BDI on age sex;
+trend on age sex;
+
+OUTPUT:	STDYX;
