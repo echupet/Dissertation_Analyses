@@ -9,49 +9,16 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-Load packages & data files
+Load data file (CAP sequences in long format)
 ```{r}
-library(lme4)
-library(lmerTest)
+dlong = read.csv("../../Data/ScanTask_Data/CAP_k8_long_metrics_2024-09-02.csv",stringsAsFactors = FALSE, header=TRUE)
 ```
 
+Create subsets of data by block/trial type
 ```{r}
-dwide = read.csv("../../Data/Brain_Data/CAP_measures_overall_2024-04-10.csv",stringsAsFactors = FALSE, header=TRUE)
-dlong = read.csv("../../Data/Brain_Data/CAP_k8_long_sequence_2024-07-05.csv",stringsAsFactors = FALSE, header=TRUE)
+# subset data by block/trial type:
 
-#dtest = read.csv("../../Data/Merged_Data/Merged_Data_9s_n154_2024-06-18.csv",stringsAsFactors = FALSE, header=TRUE)
-
-#sublist = unique(dtest$participant)
-```
-
-```{r}
-# exclude additional subjects
-exc1 = c("sub-001", "sub-146", "sub-092", "sub-016", "sub-032")
-
-dwide = dwide[!(dwide$subid %in% exc1),]
-
-sum(dwide$overall_ts_8==0) # 46
-
-dlong = dlong[!(dlong$subid %in% exc1),]
-length(unique(dlong$subid)) # 154
-```
-Identify states that are responsive to changes in WM load
-```{r}
-t.test(dwide$ts_1_0back, dwide$ts_1_2back, paired=TRUE) # sig., 0-back responsive
-t.test(dwide$ts_2_0back, dwide$ts_2_2back, paired=TRUE) # sig., 0-back responsive
-t.test(dwide$ts_3_0back, dwide$ts_3_2back, paired=TRUE) # marginal, 0-back responsive
-t.test(dwide$ts_4_0back, dwide$ts_4_2back, paired=TRUE) # ns
-t.test(dwide$ts_5_0back, dwide$ts_5_2back, paired=TRUE) # ns
-t.test(dwide$ts_6_0back, dwide$ts_6_2back, paired=TRUE) # sig. # this one, 2-back responsive
-t.test(dwide$ts_7_0back, dwide$ts_7_2back, paired=TRUE) # sig. 0-back responsive
-t.test(dwide$ts_8_0back, dwide$ts_8_2back, paired=TRUE) # sig., 2-back responsive
-
-```
-
-```{r}
-# subset df by block/trial type:
-
-# preceding errors- trials are 2.5 seconds long... so maybe just 3 vols = 2.4 seconds
+# preceding errors- trials are 2.5 seconds long, so count 3 vols = 2.4 seconds
 derrors = dlong[dlong$errors_dist_inv<=3,]
 
 # preceding long RTs
@@ -75,56 +42,44 @@ dAllCue = dlong[dlong$voleventcat=="Cue",]
 ```
 
 ```{r}
-# get counts for overall task, not including cue
-#################################################
-print("Task overall:")
-(obs_alltask = table(dAllTask$all_states_path2))  # 7178  7216  5357 17416  9232 15682 13079  1376 
-sum(obs_alltask) # 76536
+# get_freq = get frequency table of states for a given condition
+# input is column containing state sequences
 
-# get counts for overall 0-backs
-################################
-print("0-backs:")
-(obs_all0b = table(dAll0b$all_states_path2))  # 4566 3989 2807 8741 4520 5483 7642  598
-sum(obs_all0b) # 38346
-
-# get counts for overall 2-backs
-################################
-print("2-backs:")
-(obs_all2b = table(dAll2b$all_states_path2)) # 2612  3227  2550  8675  4712 10199  5437   778
-sum(obs_all2b) # 38190
-obs_all2b
-
-# get counts for overall fix
-############################
-print("Fixation:")
-(obs_allFix = table(dAllFix$all_states_path2))
-sum(obs_allFix ) 
-
-# get counts for overall cue
-#############################
-print("Cue periods:")
-(obs_allCue = table(dAllCue$all_states_path2))
-sum(obs_allCue) 
-
-# get counts for before errors
-##############################
-print("Error trials:")
-(obs_err = table(derrors$all_states_path2)) 
-sum(obs_err)
-
-# get counts for before long RTs
-##############################
-print("Long RT trials:")
-(obs_rts = table(dlongRTs$all_states_path2)) 
-sum(obs_rts) 
+get_freq = function(sequence) {
+  freq_table = table(sequence)
+  print("Frequencies:", quote=FALSE)
+  print(freq_table)
+  print("Total Observations:", quote=FALSE)
+  print(sum(freq_table))
+  return(freq_table)
+}
 
 ```
 
 ```{r}
+# save frequency tables for each condition of interest
 
-# see which states are driving differences:
-# define function for comparing each pair in table
-# must be table with 2 rows
+obs_alltask = get_freq(dAllTask$all_states_path2)
+
+obs_all0b = get_freq(dAll0b$all_states_path2)
+
+obs_all2b = get_freq(dAll2b$all_states_path2)
+
+obs_allFix = get_freq(dAllFix$all_states_path2)
+
+obs_allCue = get_freq(dAllCue$all_states_path2)
+
+obs_err = get_freq(derrors$all_states_path2)
+
+obs_rts = get_freq(dlongRTs$all_states_path2)
+
+```
+
+```{r}
+# see which states are driving differences...
+
+# comp_freq = function for comparing each pair in a frequency table
+# input is table with 2 rows
 comp_freq = function(tbl) {
   nstates = dim(tbl)[2]
   total1 = sum(tbl[1,])
@@ -139,7 +94,6 @@ comp_freq = function(tbl) {
 ```
 
 ```{r}
-
 # Compare task vs fixation distributions:
 ##########################################
 obs_task_vs_fix <- rbind(obs_alltask, obs_allFix)
@@ -151,7 +105,9 @@ comp_freq(obs_task_vs_fix)
 # see proportions
 obs_alltask/sum(obs_alltask)
 obs_allFix/sum(obs_allFix)
+```
 
+```{r}
 # compare 0b vs 2b:
 ###################
 obs_0b_vs_2b <- rbind(obs_all0b, obs_all2b)
@@ -163,7 +119,9 @@ comp_freq(obs_0b_vs_2b) # ns for state 4
 # see proportions
 obs_all0b/sum(obs_all0b)
 obs_all2b/sum(obs_all2b)
+```
 
+```{r}
 # compare cue with task:
 ########################
 obs_task_vs_cue <- rbind(obs_alltask, obs_allCue)
@@ -175,7 +133,9 @@ comp_freq(obs_task_vs_cue)
 # see proportions
 obs_alltask/sum(obs_alltask)
 obs_allCue/sum(obs_allCue)
+```
 
+```{r}
 # Compare long RT trials with tasks overall:
 ############################################
 obs_rts_vs_task <- rbind(obs_rts, obs_alltask)
@@ -187,7 +147,9 @@ comp_freq(obs_rts_vs_task) # driven by: 2, 5
 # see proportions
 obs_rts/sum(obs_rts)
 obs_alltask/sum(obs_alltask)
+```
 
+```{r}
 # Compare error trials with tasks overall:
 ##########################################
 obs_err_vs_task <- rbind(obs_err, obs_alltask)
@@ -199,6 +161,4 @@ comp_freq(obs_err_vs_task) # 1, 3, 8
 # see proportions
 obs_err/sum(obs_err)
 obs_alltask/sum(obs_alltask)
-
 ```
-
